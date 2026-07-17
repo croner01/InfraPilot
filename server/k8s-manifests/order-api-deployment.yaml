@@ -1,0 +1,60 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: order-api
+  namespace: order-service
+  labels:
+    app: order-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: order-api
+  template:
+    metadata:
+      labels:
+        app: order-api
+    spec:
+      containers:
+        - name: order-api
+          image: docker.io/library/node:22-alpine
+          command: ["node", "/app/worker.mjs"]
+          ports:
+            - containerPort: 8080
+              name: http
+          env:
+            - name: LEAK_RATE_MB
+              value: "6"
+            - name: TICK_MS
+              value: "700"
+            - name: PORT
+              value: "8080"
+          resources:
+            requests:
+              memory: "32Mi"
+              cpu: "50m"
+            limits:
+              # 故意配置过低的内存 limit(200Mi), 用于触发真实 kubelet/cgroup OOM Kill,
+              # 供 Agent 排查 —— 这是本演示场景的"故障根因"配置, InfraPilot Agent 需要
+              # 自主发现该 Pod 处于 OOMKilled/CrashLoopBackOff 状态并建议调高该值。
+              memory: "200Mi"
+              cpu: "200m"
+          volumeMounts:
+            - name: script
+              mountPath: /app
+      volumes:
+        - name: script
+          configMap:
+            name: order-api-script
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: order-api
+  namespace: order-service
+spec:
+  selector:
+    app: order-api
+  ports:
+    - port: 8080
+      targetPort: 8080

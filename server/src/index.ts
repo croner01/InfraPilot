@@ -3,7 +3,7 @@ import cors from "cors";
 import { createServer } from "node:http";
 import { apiRouter } from "./routes/api.js";
 import { attachWsHub } from "./ws/hub.js";
-import { orderApiSupervisor } from "./demo/supervisor.js";
+import { startLogShipper, stopLogShipper } from "./skills/elk/logShipper.js";
 
 const app = express();
 app.use(cors());
@@ -18,12 +18,13 @@ attachWsHub(server);
 
 server.listen(PORT, () => {
   console.log(`[InfraPilot Server] listening on :${PORT}`);
-  // 启动演示故障场景(order-api 内存泄漏 -> OOMKilled -> CrashLoopBackOff)
-  orderApiSupervisor.start();
-  console.log("[Demo] order-api 演示工作负载已启动(将在约2分钟内触发内存泄漏故障)");
+  // order-api 演示工作负载已部署为真实K8s Deployment(见 server/k8s-manifests/),
+  // 这里只需启动日志采集管道(真实Pod日志 -> 真实OpenSearch)
+  startLogShipper();
+  console.log("[LogShipper] order-api 真实Pod日志采集管道已启动 -> OpenSearch order-api-logs-*");
 });
 
 process.on("SIGTERM", () => {
-  orderApiSupervisor.stop();
+  stopLogShipper();
   server.close(() => process.exit(0));
 });

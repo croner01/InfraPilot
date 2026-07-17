@@ -59,7 +59,7 @@ export function classifyRisk(skill: SkillName, tool: string, args: Record<string
 
 function describeBlastRadius(skill: SkillName, tool: string, args: Record<string, unknown>): string {
   if (skill === "k8s" && tool === "patch_resource_limits") {
-    return `该Deployment(${args.deployment_name}) 位于生产命名空间 ${args.namespace}, 属于订单核心链路, 变更会触发滚动重启`;
+    return `该Deployment(${args.deployment_name}) 位于命名空间 ${args.namespace}, 属于订单核心链路, 变更会触发滚动重启(真实K8s集群操作)`;
   }
   return "未知影响范围,建议人工评估";
 }
@@ -68,9 +68,9 @@ function describeBlastRadius(skill: SkillName, tool: string, args: Record<string
 export function renderDiffPreview(skill: SkillName, tool: string, args: Record<string, unknown>): string {
   if (skill === "k8s" && tool === "patch_resource_limits") {
     return [
-      `kubectl patch deployment ${args.deployment_name} -n ${args.namespace}`,
-      `  resources.limits.memory:`,
-      `-   200Mi`,
+      `kubectl patch deployment ${args.deployment_name} -n ${args.namespace} --type=strategic`,
+      `  spec.template.spec.containers[${args.container_name}].resources.limits.memory:`,
+      `-   (当前值, 请以 describe_pod 结果为准)`,
       `+   ${args.memory_limit_mi}Mi`,
     ].join("\n");
   }

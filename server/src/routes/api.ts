@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { createSession, getSession, listSessionSummaries, resolveApprovalDecision } from "../agent/sessionStore.js";
 import { runAgentTurn } from "../agent/orchestrator.js";
-import { orderApiSupervisor } from "../demo/supervisor.js";
+import { getRealPodState, resetRealDemoScenario } from "../demo/realPodState.js";
 import { listAuditBySession } from "../db/db.js";
 
 export const apiRouter = Router();
@@ -47,13 +47,22 @@ apiRouter.post("/approvals/:approvalId/decide", (req, res) => {
   res.json({ ok: true });
 });
 
-// -------------------- Demo 场景控制 --------------------
+// -------------------- Demo 场景控制(真实K8s集群) --------------------
 
-apiRouter.get("/demo/pod-state", (_req, res) => {
-  res.json(orderApiSupervisor.getState());
+apiRouter.get("/demo/pod-state", async (_req, res) => {
+  try {
+    const state = await getRealPodState();
+    res.json(state ?? { podName: "order-api", namespace: "order-service", status: "NotFound", restartCount: 0, resources: { limitsMemoryMb: 0 }, events: [], currentRssMb: 0 });
+  } catch (err: any) {
+    res.status(500).json({ error: `查询真实K8s集群失败: ${err?.message ?? String(err)}` });
+  }
 });
 
-apiRouter.post("/demo/restart-scenario", (_req, res) => {
-  orderApiSupervisor.resetScenario(200);
-  res.json({ ok: true });
+apiRouter.post("/demo/restart-scenario", async (_req, res) => {
+  try {
+    await resetRealDemoScenario(200);
+    res.json({ ok: true });
+  } catch (err: any) {
+    res.status(500).json({ error: `重置真实K8s场景失败: ${err?.message ?? String(err)}` });
+  }
 });
