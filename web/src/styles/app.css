@@ -1,0 +1,67 @@
+* { box-sizing: border-box; }
+body, html, #root { margin: 0; height: 100%; background: #0d1117; color: #c9d1d9; font-family: -apple-system, "Segoe UI", "PingFang SC", sans-serif; }
+code { font-family: "SF Mono", Consolas, monospace; background: #161b22; padding: 1px 5px; border-radius: 4px; }
+
+.app { display: grid; grid-template-columns: 240px 1fr 300px; height: 100vh; }
+
+.sidebar { background: #010409; padding: 16px; border-right: 1px solid #21262d; display: flex; flex-direction: column; gap: 10px; }
+.brand { font-weight: 700; font-size: 15px; margin-bottom: 8px; }
+.hint { font-size: 12px; color: #8b949e; margin-top: 16px; line-height: 1.6; }
+
+.btn { border: 1px solid #30363d; background: #21262d; color: #c9d1d9; padding: 8px 12px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+.btn:hover { background: #30363d; }
+.btn.primary { background: #238636; border-color: #2ea043; color: white; }
+.btn.primary:hover { background: #2ea043; }
+.btn.ghost { background: transparent; }
+.btn.approve { background: #238636; border-color: #2ea043; color: white; }
+.btn.reject { background: #7d1f22; border-color: #a12b2f; color: white; }
+
+.timeline-panel { display: flex; flex-direction: column; height: 100vh; }
+.empty-state { flex: 1; display: flex; align-items: center; justify-content: center; color: #6e7681; }
+.timeline { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 10px; }
+
+.msg { padding: 10px 14px; border-radius: 8px; max-width: 80%; font-size: 14px; line-height: 1.6; white-space: pre-wrap; }
+.msg.user { background: #1f6feb33; align-self: flex-end; border: 1px solid #1f6feb55; }
+.msg.assistant { background: #161b22; border: 1px solid #21262d; align-self: flex-start; }
+.msg.assistant.rca { border-color: #d29922; background: #2b210566; }
+
+.event { font-size: 12.5px; color: #8b949e; padding: 4px 10px; }
+.event.status { font-style: italic; }
+.event.tool-call { display: flex; gap: 8px; align-items: center; background: #0d1117; border-left: 2px solid #30363d; padding: 6px 10px; }
+.event.tool-call .args { color: #6e7681; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 400px; }
+.event.tool-result.ok { color: #3fb950; }
+.event.tool-result.fail { color: #f85149; }
+.event.decision.approved { color: #3fb950; }
+.event.decision.rejected { color: #f85149; }
+
+.badge { font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: 600; text-transform: uppercase; }
+.badge.risk-readonly { background: #1f6feb33; color: #58a6ff; }
+.badge.risk-low { background: #23863633; color: #3fb950; }
+.badge.risk-medium { background: #9e6a0333; color: #d29922; }
+.badge.risk-high { background: #da363333; color: #f85149; }
+.badge.risk-critical { background: #f8514955; color: #ffffff; }
+
+.approval-card { border: 1px solid #d29922; background: #2b210566; border-radius: 8px; padding: 14px; max-width: 520px; }
+.approval-header { font-weight: 600; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+.approval-body { font-size: 13px; display: flex; flex-direction: column; gap: 6px; }
+.diff { background: #0d1117; border-radius: 6px; padding: 8px; font-size: 12px; white-space: pre-wrap; }
+.blast { color: #d29922; font-size: 12px; }
+.approval-actions { display: flex; gap: 8px; margin-top: 12px; }
+
+.composer { display: flex; gap: 8px; padding: 16px; border-top: 1px solid #21262d; }
+.composer input { flex: 1; background: #0d1117; border: 1px solid #30363d; color: #c9d1d9; padding: 10px 12px; border-radius: 6px; font-size: 14px; }
+
+.context-panel { background: #010409; border-left: 1px solid #21262d; padding: 16px; overflow-y: auto; }
+.context-panel h3 { font-size: 13px; color: #8b949e; margin-bottom: 12px; }
+.pod-card { background: #161b22; border: 1px solid #21262d; border-radius: 8px; padding: 12px; font-size: 12.5px; }
+.pod-header { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
+.status-dot { width: 8px; height: 8px; border-radius: 50%; }
+.status-dot.ok { background: #3fb950; }
+.status-dot.bad { background: #f85149; }
+.status-dot.warn { background: #d29922; }
+.pod-row { color: #8b949e; margin-bottom: 4px; }
+.text-danger { color: #f85149; }
+.pod-events { margin-top: 10px; display: flex; flex-direction: column; gap: 4px; max-height: 220px; overflow-y: auto; }
+.pod-event { font-size: 11px; color: #6e7681; }
+.pod-event.warn { color: #d29922; }
+.pod-event .ts { color: #484f58; margin-right: 4px; }

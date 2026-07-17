@@ -1,0 +1,91 @@
+// ============================================================================
+// Session Store — 会话状态管理 + 时间线事件广播
+// 对应设计文档 §3.3 AgentState / §13.4 Checkpoint持久化(demo简化为内存+SQLite)
+// ============================================================================
+
+import { EventEmitter } from "node:events";
+import { v4 as uuidv4 } from "uuid";
+import { AgentSession, TimelineEvent, TimelineEventType } from "../types.js";
+import { upsertSession, getSession as dbGetSession, listSessions as dbListSessions } from "../db/db.js";
+
+const sessions = new Map<string, AgentSession>();
+export const bus = new EventEmitter();
+bus.setMaxListeners(200);
+
+// 用于审批中断/恢复的 pending resolver —— 对应 LangGraph 的 interrupt()/Command(resume=...)
+const pendingApprovals = new Map<string, (decision: { approved: boolean; approvedBy: string }) => void>();
+
+export function createSession(title: string): AgentSession {
+  const session: AgentSession = {
+    id: uuidv4(),
+    title,
+    status: "intake",
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    plan: [],
+    evidence: [],
+    pendingToolCalls: [],
+    executedToolCalls: [],
+    iteration: 0,
+    maxIterations: 12,
+  };
+  sessions.set(session.id, session);
+  persist(session);
+  return session;
+}
+
+export function getSession(id: string): AgentSession | undefined {
+  if (sessions.has(id)) return sessions.get(id);
+  const row = dbGetSession(id);
+  if (row) {
+    const parsed = JSON.parse(row.state_json) as AgentSession;
+    sessions.set(id, parsed);
+    return parsed;
+  }
+  return undefined;
+}
+
+export function listSessionSummaries() {
+  return dbListSessions();
+}
+
+export function updateSession(id: string, mutator: (s: AgentSession) => void) {
+  const session = getSession(id);
+  if (!session) throw new Error(`session ${id} not found`);
+  mutator(session);
+  session.updatedAt = new Date().toISOString();
+  persist(session);
+  return session;
+}
+
+function persist(session: AgentSession) {
+  upsertSession(session.id, session.title, session.status, JSON.stringify(session));
+}
+
+export function emitEvent(sessionId: string, type: TimelineEventType, payload: unknown) {
+  const event: TimelineEvent = {
+    id: uuidv4(),
+    sessionId,
+    type,
+    timestamp: new Date().toISOString(),
+    payload,
+  };
+  bus.emit("event", event);
+  return event;
+}
+
+export function waitForApprovalDecision(approvalId: string): Promise<{ approved: boolean; approvedBy: string }> {
+  return new Promise((resolve) => {
+    pendingApprovals.set(approvalId, resolve);
+  });
+}
+
+export function resolveApprovalDecision(approvalId: string, decision: { approved: boolean; approvedBy: string }) {
+  const resolver = pendingApprovals.get(approvalId);
+  if (resolver) {
+    resolver(decision);
+    pendingApprovals.delete(approvalId);
+    return true;
+  }
+  return false;
+}
