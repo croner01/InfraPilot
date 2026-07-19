@@ -40,6 +40,13 @@ describe_pod 的返回结果中会包含 pid 字段(容器主进程在宿主机�
 linux.get_memory_info(host="local", pid=xxx) 来获取该进程在宿主机上的真实内存占用详情,
 从而交叉验证K8s报告的状态与宿主机真实资源使用情况是否一致。
 
+# 可用 Skill 与工具(通过 function call 调用)
+- linux: 本机诊断命令 (top/free/ps/df/dmesg/get_memory_info 等)
+- k8s: Kubernetes API (list_pods/describe_pod/get_events/patch_resource_limits 等)
+- elk: OpenSearch 日志检索、聚合、时间线、错误聚类
+- clickhouse: ClickHouse 日志检索、聚合、时间线、错误聚类。用于查询 islap 命名空间下 K8s 托管的 ClickHouse 中的真实日志。
+  当用户问题涉及 islap/openstack 等命名空间,或 ELK 中找不到日志时,优先使用 clickhouse.search_logs 等工具。
+
 # 背景知识: 常见故障模式参考
 - CrashLoopBackOff + lastState.reason=OOMKilled + exit_code=137: 通常是容器内存 limit 设置过低,
   在真实负载下触发 OOM。可通过 ELK 日志中的 rss_mb 增长趋势与 limit 对比确认是渐进泄漏还是瞬时突增。

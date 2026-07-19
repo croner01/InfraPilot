@@ -12,6 +12,7 @@
 // ============================================================================
 
 import * as k8s from "@kubernetes/client-node";
+import fs from "node:fs";
 
 function loadKubeConfig(): k8s.KubeConfig {
   const kc = new k8s.KubeConfig();
@@ -20,8 +21,32 @@ function loadKubeConfig(): k8s.KubeConfig {
     kc.loadFromCluster();
     return kc;
   }
-  kc.loadFromDefault();
-  return kc;
+
+  // 1. 优先使用 KUBECONFIG 环境变量指定的文件（生产/显式配置）
+  if (process.env.KUBECONFIG) {
+    kc.loadFromFile(process.env.KUBECONFIG);
+    console.log(`[k8s client] loaded kubeconfig from KUBECONFIG: ${process.env.KUBECONFIG}`);
+    return kc;
+  }
+
+  // 2. sandbox 常见 k3s 系统级 kubeconfig（避免 ~/.kube/config 里放着旧证书导致 401）
+  const k3sConfig = "/etc/rancher/k3s/k3s.yaml";
+  if (fs.existsSync(k3sConfig)) {
+    kc.loadFromFile(k3sConfig);
+    console.log(`[k8s client] loaded kubeconfig from k3s default: ${k3sConfig}`);
+    return kc;
+  }
+
+  // 3. 标准默认路径 ~/.kube/config
+  const home = process.env.HOME || process.env.USERPROFILE;
+  const defaultConfig = home ? `${home}/.kube/config` : undefined;
+  if (defaultConfig && fs.existsSync(defaultConfig)) {
+    kc.loadFromFile(defaultConfig);
+    console.log(`[k8s client] loaded kubeconfig from default: ${defaultConfig}`);
+    return kc;
+  }
+
+  throw new Error("找不到可用的 kubeconfig; 请设置 KUBECONFIG 环境变量");
 }
 
 export const kubeConfig = loadKubeConfig();

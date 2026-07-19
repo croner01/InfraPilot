@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: infrapilot-server-env
+  namespace: infrapilot
+data:
+  NODE_ENV: "production"
+  PORT: "8787"
+  # 如需使用 DeepSeek 的不同模型可在此覆盖
+  # REASONING_MODEL: "deepseek-v4-pro"
+  # FAST_MODEL: "deepseek-v4-flash"
+  #
+  # linux-mcp-server endpoint 映射：key 为注册主机别名，value 为 <ip>:8443
+  # 示例（请替换为实际节点 IP，或使用节点名 + headless service）
+  MCP_ENDPOINTS: "{}"
+  # MCP_DISABLE_SSH_FALLBACK: "false"

@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: infrapilot
+  labels:
+    app.kubernetes.io/name: infrapilot-web
+    app.kubernetes.io/part-of: infrapilot

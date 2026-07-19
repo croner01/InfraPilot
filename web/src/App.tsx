@@ -4,6 +4,18 @@ import type { TimelineEvent } from "./lib/types";
 
 const API_BASE = "/api";
 
+/** 兼容 HTTP/非安全上下文的 ID 生成（crypto.randomUUID 在 http://IP 下不可用） */
+function generateId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === "x" ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
 interface ApprovalPayload {
   approvalId: string;
   skill: string;
@@ -66,7 +78,7 @@ export default function App() {
     setInput("");
     setEvents((prev) => [
       ...prev,
-      { id: crypto.randomUUID(), sessionId, type: "user_message", timestamp: new Date().toISOString(), payload: { content: message } },
+      { id: generateId(), sessionId, type: "user_message", timestamp: new Date().toISOString(), payload: { content: message } },
     ]);
     await fetch(`${API_BASE}/sessions/${sessionId}/messages`, {
       method: "POST",

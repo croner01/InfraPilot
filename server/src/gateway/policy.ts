@@ -8,8 +8,9 @@ import { RiskDecision, SkillName, ToolDef } from "../types.js";
 import { linuxTools } from "../skills/linux/tools.js";
 import { k8sTools } from "../skills/k8s/tools.js";
 import { elkTools } from "../skills/elk/tools.js";
+import { clickhouseTools } from "../skills/clickhouse/tools.js";
 
-export const ALL_TOOLS: ToolDef[] = [...linuxTools, ...k8sTools, ...elkTools];
+export const ALL_TOOLS: ToolDef[] = [...linuxTools, ...k8sTools, ...elkTools, ...clickhouseTools];
 
 export function findTool(skill: SkillName, tool: string): ToolDef | undefined {
   return ALL_TOOLS.find((t) => t.skill === skill && t.name === tool);

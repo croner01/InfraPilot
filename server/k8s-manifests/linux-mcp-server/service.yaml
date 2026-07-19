@@ -1,0 +1,16 @@
+# Headless Service，用于在集群内通过 DNS 发现 linux-mcp-server Pod。
+# 生产环境若按节点 IP 直接访问，可不在主 server 中配置此 DNS。
+apiVersion: v1
+kind: Service
+metadata:
+  name: linux-mcp-server
+  namespace: infrapilot-mcp
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  selector:
+    app: linux-mcp-server
+  ports:
+    - name: grpc
+      port: 8443
+      targetPort: 8443

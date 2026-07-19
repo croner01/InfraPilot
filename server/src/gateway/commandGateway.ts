@@ -9,6 +9,7 @@ import { PendingToolCall, ToolExecutionResult } from "../types.js";
 import { executeLinuxTool } from "../skills/linux/tools.js";
 import { executeK8sTool } from "../skills/k8s/tools.js";
 import { executeElkTool } from "../skills/elk/tools.js";
+import { executeClickhouseTool } from "../skills/clickhouse/tools.js";
 import { insertAudit } from "../db/db.js";
 
 async function dispatch(skill: string, tool: string, args: Record<string, unknown>): Promise<ToolExecutionResult> {
@@ -19,6 +20,8 @@ async function dispatch(skill: string, tool: string, args: Record<string, unknow
       return executeK8sTool(tool, args);
     case "elk":
       return executeElkTool(tool, args);
+    case "clickhouse":
+      return executeClickhouseTool(tool, args);
     default:
       return { success: false, error: `未知skill: ${skill}`, durationMs: 0 };
   }

@@ -1,0 +1,28 @@
+# InfraPilot SSH Host Registry 示例配置
+# 复制为 /etc/infrapilot/ssh-hosts.yaml 或 SSH_HOSTS_CONFIG 指向的路径
+hosts:
+  - name: node-1
+    hostname: 192.168.3.100
+    port: 22
+    username: ops
+    auth:
+      type: privateKey
+      privateKeyPath: /home/ops/.ssh/id_ed25519
+      # 或从环境变量读取私钥内容（二选一）
+      # privateKeyEnv: NODE1_SSH_KEY
+      # passphraseEnv: NODE1_SSH_PASSPHRASE
+
+  - name: network-node-2
+    hostname: 192.168.3.101
+    port: 22
+    username: ops
+    auth:
+      type: password
+      # 密码从环境变量读取，配置文件里不写明文
+      passwordEnv: NODE2_PASSWORD
+
+  - name: k8s-master-1
+    hostname: 10.0.0.5
+    username: root
+    auth:
+      type: agent

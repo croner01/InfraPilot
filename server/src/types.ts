@@ -5,7 +5,7 @@
 
 export type RiskLevel = "readonly" | "low" | "medium" | "high" | "critical";
 
-export type SkillName = "linux" | "k8s" | "elk" | "openstack";
+export type SkillName = "linux" | "k8s" | "elk" | "clickhouse" | "openstack";
 
 export interface ToolDef {
   name: string;
