@@ -1,8 +1,9 @@
 import { Router } from "express";
-import { createSession, getSession, listSessionSummaries, resolveApprovalDecision } from "../agent/sessionStore.js";
-import { runAgentTurn } from "../agent/orchestrator.js";
+import { createSession, getSession, listSessionSummaries, terminateSession } from "../agent/sessionStore.js";
+import { startAgentTurn, resumeAgentTurn } from "../agent/orchestrator.js";
 import { getRealPodState, resetRealDemoScenario } from "../demo/realPodState.js";
-import { listAuditBySession } from "../db/db.js";
+import { listAuditBySession, decideApproval, getApproval } from "../db/db.js";
+import { configRouter } from "./config.js";
 
 export const apiRouter = Router();
 
@@ -26,6 +27,12 @@ apiRouter.get("/sessions/:id/audit", (req, res) => {
   res.json(listAuditBySession(req.params.id));
 });
 
+apiRouter.delete("/sessions/:id", (req, res) => {
+  const session = terminateSession(req.params.id);
+  if (!session) return res.status(404).json({ error: "session not found" });
+  res.json({ ok: true, session });
+});
+
 apiRouter.post("/sessions/:id/messages", async (req, res) => {
   const { id } = req.params;
   const { message } = req.body ?? {};
@@ -34,7 +41,7 @@ apiRouter.post("/sessions/:id/messages", async (req, res) => {
   if (!message) return res.status(400).json({ error: "message required" });
 
   res.json({ accepted: true });
-  runAgentTurn(id, message).catch((err) => {
+  startAgentTurn(id, message).catch((err) => {
     console.error("[agent error]", err);
   });
 });
@@ -42,8 +49,18 @@ apiRouter.post("/sessions/:id/messages", async (req, res) => {
 apiRouter.post("/approvals/:approvalId/decide", (req, res) => {
   const { approvalId } = req.params;
   const { approved, approvedBy } = req.body ?? {};
-  const ok = resolveApprovalDecision(approvalId, { approved: !!approved, approvedBy: approvedBy || "demo-user" });
-  if (!ok) return res.status(404).json({ error: "no pending approval with this id (可能已处理或已过期)" });
+
+  // 将审批决策持久化到数据库（替代原内存 Promise resolver）
+  decideApproval(approvalId, approved ? "approved" : "rejected", approvedBy || "demo-user");
+
+  // 从 approval 记录获取 sessionId 以触发恢复
+  const approval = getApproval(approvalId);
+  if (approval && approval.decision === "approved") {
+    resumeAgentTurn(approval.session_id, approvalId).catch((err) => {
+      console.error("[resume error]", err);
+    });
+  }
+
   res.json({ ok: true });
 });
 
@@ -66,3 +83,5 @@ apiRouter.post("/demo/restart-scenario", async (_req, res) => {
     res.status(500).json({ error: `重置真实K8s场景失败: ${err?.message ?? String(err)}` });
   }
 });
+
+apiRouter.use("/config", configRouter);

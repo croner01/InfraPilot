@@ -1,0 +1,52 @@
+# linux-mcp-server 专用镜像
+# 复用 server 代码，但以 MCP_SERVER_MODE=true 默认启动 gRPC Agent。
+# 镜像中包含常见诊断工具，便于在 DaemonSet 中通过 hostPID/hostNetwork 采集宿主机信息。
+FROM node:22 AS builder
+
+WORKDIR /app
+
+# 安装构建原生模块所需工具
+RUN apt-get update && apt-get install -y python3 make g++ && rm -rf /var/lib/apt/lists/*
+
+COPY package*.json ./
+RUN npm ci
+
+COPY . .
+RUN npm run build
+
+# -----------------------------------------------------------------------------
+FROM node:22-slim AS runtime
+
+WORKDIR /app
+
+# 运行时常用工具：
+# - libstdc++6: better-sqlite3 等原生模块依赖
+# - procps: top / ps / free
+# - iproute2: ss / ip
+# - systemd: systemctl（通过 /run/systemd 与宿主机 systemd 通信）
+RUN apt-get update && apt-get install -y \
+    libstdc++6 \
+    procps \
+    iproute2 \
+    systemd \
+    ca-certificates \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# 安装 kubectl（用于 DaemonSet 内执行 K8s 诊断命令）
+RUN curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" \
+    && install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl \
+    && rm kubectl
+
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/package*.json ./
+COPY --from=builder /app/proto ./proto
+
+ENV NODE_ENV=production
+ENV MCP_SERVER_MODE=true
+ENV MCP_SERVER_PORT=8443
+
+EXPOSE 8443
+
+CMD ["node", "dist/index.js"]

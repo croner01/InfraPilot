@@ -5,7 +5,7 @@ vi.mock("node:child_process", () => ({
 }));
 
 import { execFile } from "node:child_process";
-import { restartService, killProcess } from "./runner.js";
+import { restartService, killProcess, runCommand } from "./runner.js";
 import { sanitizePattern } from "./allowlist.js";
 
 const mockExecFile = execFile as unknown as ReturnType<typeof vi.fn>;
@@ -84,5 +84,41 @@ describe("MCP Server Runner", () => {
   it("sanitizes pattern to prevent shell injection", () => {
     expect(sanitizePattern("orderApiWorker; rm -rf /")).toBe("orderApiWorkerrm-rf");
     expect(sanitizePattern("nginx-worker_1")).toBe("nginx-worker_1");
+  });
+
+  describe("runCommand", () => {
+    it("executes allowed command", async () => {
+      setupExecSuccess("Linux");
+      const res = await runCommand("uname", ["-a"]);
+      expect(res.success).toBe(true);
+      expect(res.stdout).toBe("Linux");
+      expect(mockExecFile).toHaveBeenCalledWith("uname", ["-a"], expect.any(Object), expect.any(Function));
+    });
+
+    it("rejects command outside allowlist", async () => {
+      const res = await runCommand("rm", ["-rf", "/tmp"]);
+      expect(res.success).toBe(false);
+      expect(res.error).toContain("不在白名单中");
+      expect(mockExecFile).not.toHaveBeenCalled();
+    });
+
+    it("rejects command with path separator", async () => {
+      const res = await runCommand("/bin/cat", ["/etc/passwd"]);
+      expect(res.success).toBe(false);
+      expect(res.error).toContain("不能包含路径");
+    });
+
+    it("rejects disallowed subcommand", async () => {
+      const res = await runCommand("systemctl", ["restart", "nginx"]);
+      expect(res.success).toBe(false);
+      expect(res.error).toContain("不在允许子命令列表中");
+    });
+
+    it("allows read-only systemctl subcommand", async () => {
+      setupExecSuccess("active");
+      const res = await runCommand("systemctl", ["is-active", "nginx"]);
+      expect(res.success).toBe(true);
+      expect(mockExecFile).toHaveBeenCalledWith("systemctl", ["is-active", "nginx"], expect.any(Object), expect.any(Function));
+    });
   });
 });

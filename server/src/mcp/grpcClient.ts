@@ -18,6 +18,14 @@ const READONLY_TOOLS = new Set([
   "get_network_stats",
   "get_process_info",
   "tail_syslog",
+  "run_command",
+  "read_file",
+  "tail_file",
+  "list_directory",
+  "check_service_status",
+  "get_kubernetes_resource",
+  "describe_kubernetes_resource",
+  "get_pod_logs",
 ]);
 
 function isReadonly(tool: string): boolean {
@@ -101,6 +109,16 @@ export class GrpcMcpClient implements McpClient {
         case "tail_syslog":
           client.TailSyslog(req, meta, { deadline }, cb);
           break;
+        case "run_command":
+        case "read_file":
+        case "tail_file":
+        case "list_directory":
+        case "check_service_status":
+        case "get_kubernetes_resource":
+        case "describe_kubernetes_resource":
+        case "get_pod_logs":
+          client.RunCommand(req, meta, { deadline }, cb);
+          break;
         case "restart_service":
           client.RestartService(req, meta, { deadline }, cb);
           break;
@@ -149,6 +167,52 @@ export class GrpcMcpClient implements McpClient {
         req.pid = Number(args.pid ?? 0);
         req.signal = String(args.signal ?? "SIGTERM");
         break;
+
+      // 通用命令执行 —— 直接透传 command/args
+      case "run_command": {
+        req.host = String(args.host ?? "local");
+        req.command = String(args.command ?? "");
+        req.args = Array.isArray(args.args) ? args.args.map(String) : [];
+        if (args.timeout_ms) req.timeout_ms = Number(args.timeout_ms);
+        break;
+      }
+
+      // 常用只读命令的封装，最终都通过 RunCommand 发送
+      case "read_file":
+        req.host = String(args.host ?? "local");
+        req.command = "cat";
+        req.args = [String(args.path ?? "")];
+        break;
+      case "tail_file":
+        req.host = String(args.host ?? "local");
+        req.command = "tail";
+        req.args = ["-n", String(args.lines ?? 20), String(args.path ?? "")];
+        break;
+      case "list_directory":
+        req.host = String(args.host ?? "local");
+        req.command = "ls";
+        req.args = ["-la", String(args.path ?? ".")];
+        break;
+      case "check_service_status":
+        req.host = String(args.host ?? "local");
+        req.command = "systemctl";
+        req.args = ["status", String(args.service_name ?? "")];
+        break;
+      case "get_kubernetes_resource":
+        req.host = String(args.host ?? "local");
+        req.command = "kubectl";
+        req.args = buildKubectlArgs("get", args);
+        break;
+      case "describe_kubernetes_resource":
+        req.host = String(args.host ?? "local");
+        req.command = "kubectl";
+        req.args = buildKubectlArgs("describe", args);
+        break;
+      case "get_pod_logs":
+        req.host = String(args.host ?? "local");
+        req.command = "kubectl";
+        req.args = buildKubectlLogArgs(args);
+        break;
     }
     return req;
   }
@@ -193,6 +257,45 @@ export class GrpcMcpClient implements McpClient {
       stdout: stdout.length > 0 ? stdout.join("\n") : undefined,
     };
   }
+}
+
+function buildKubectlArgs(subCommand: string, args: Record<string, unknown>): string[] {
+  const out: string[] = [subCommand];
+  if (args.namespace) {
+    out.push("-n", String(args.namespace));
+  }
+  if (args.all_namespaces) {
+    out.push("--all-namespaces");
+  }
+  out.push(String(args.resource ?? "pods"));
+  if (args.name) {
+    out.push(String(args.name));
+  }
+  if (args.output) {
+    out.push("-o", String(args.output));
+  }
+  return out;
+}
+
+function buildKubectlLogArgs(args: Record<string, unknown>): string[] {
+  const out: string[] = ["logs"];
+  if (args.namespace) {
+    out.push("-n", String(args.namespace));
+  }
+  out.push(String(args.pod_name ?? ""));
+  if (args.container) {
+    out.push("-c", String(args.container));
+  }
+  if (args.tail_lines !== undefined) {
+    out.push("--tail", String(args.tail_lines));
+  }
+  if (args.previous) {
+    out.push("--previous");
+  }
+  if (args.since) {
+    out.push("--since", String(args.since));
+  }
+  return out;
 }
 
 export const grpcMcpClient = new GrpcMcpClient();

@@ -10,7 +10,31 @@
 - （可选）OpenSearch / Elasticsearch（用于 ELK Skill）
 - （可选）ClickHouse（用于 ClickHouse Skill，位于 `islap` 命名空间时会自动发现）
 
-## 2. 本地开发部署
+## 2. 部署架构
+
+```text
+┌─────────────────┐
+│   用户浏览器     │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐     ┌──────────────────────────────┐
+│  infrapilot-web │────▶│  infrapilot-server (Deployment)│
+│   (React + Vite)│     │  - HTTP API / WebSocket        │
+└─────────────────┘     │  - Agent / LLM / Skill 路由    │
+                        │  - MCP Client / SSH Proxy      │
+                        └──────────────┬───────────────┘
+                                       │
+           ┌───────────────────────────┼───────────────────────────┐
+           │ gRPC (MCP)                │ SSH                       │ K8s API
+           ▼                           ▼                           ▼
+┌─────────────────────┐    ┌─────────────────┐         ┌─────────────────┐
+│ linux-mcp-server    │    │ 远程主机/VM      │         │ k3s / Kubernetes │
+│ (DaemonSet, 每节点)  │    │ (SSH Proxy)     │         │ (K8s Skill)     │
+└─────────────────────┘    └─────────────────┘         └─────────────────┘
+```
+
+## 3. 本地开发部署
 
 ```bash
 # 1. 后端
@@ -27,11 +51,11 @@ npm run dev          # http://localhost:5173
 
 前端 dev server 已配置代理，所有 `/api` 与 `/ws` 请求会转发到 `http://localhost:8787`。
 
-## 3. 本地开发连接远程主机
+## 4. 本地开发连接远程主机
 
 本地 `npm run dev` 时，后端同样可以通过 **SSH Proxy** 或 **linux-mcp-server** 连接到远程设备。
 
-### 3.1 方式一：SSH Proxy（Phase 1，只读命令）
+### 4.1 方式一：SSH Proxy（Phase 1，只读命令）
 
 启动后端前注入 `SSH_HOSTS` 或配置文件：
 
@@ -60,7 +84,7 @@ npm run dev
 
 配置文件示例见 `server/config/ssh-hosts.yaml.example`。
 
-### 3.2 方式二：linux-mcp-server（Phase 2，推荐）
+### 4.2 方式二：linux-mcp-server（Phase 2，推荐）
 
 在目标主机上启动 MCP server：
 
@@ -80,7 +104,7 @@ npm run dev
 
 JSON 示例见 `server/config/mcp-endpoints.json.example`。
 
-### 3.3 Agent 使用方式
+### 4.3 Agent 使用方式
 
 Agent/前端调用方式不变，只需在参数中指定 `host`：
 
@@ -94,43 +118,51 @@ Agent/前端调用方式不变，只需在参数中指定 `host`：
 
 后端会优先尝试 MCP；如果 MCP 不可用且是只读工具，则降级到 SSH；变更类工具（`restart_service` / `kill_process`）只允许通过 MCP 执行。
 
-## 4. 容器镜像构建
+## 5. 容器镜像构建
 
-### 4.1 后端镜像
+### 5.1 后端镜像
 
 ```bash
 cd server
 docker build -t infrapilot-server:latest .
 ```
 
-### 3.2 前端镜像
+### 5.2 前端镜像
 
 ```bash
 cd web
 docker build -t infrapilot-web:latest .
 ```
 
-### 4.3 加载镜像到 k3s 节点
+### 5.3 linux-mcp-server 镜像
+
+```bash
+cd server
+docker build -f Dockerfile.mcp -t infrapilot/linux-mcp-server:latest .
+```
+
+### 5.4 加载镜像到 k3s 节点
 
 如果 k3s 使用 containerd，执行：
 
 ```bash
 docker save infrapilot-server:latest | k3s ctr images import -
 docker save infrapilot-web:latest | k3s ctr images import -
+docker save infrapilot/linux-mcp-server:latest | k3s ctr images import -
 ```
 
 如果是多节点集群，请推送到私有镜像仓库并修改镜像名。
 
-## 5. Kubernetes 部署
+## 6. Kubernetes 部署
 
-### 5.1 部署后端与前端
+### 6.1 部署后端与前端
 
 ```bash
 kubectl apply -f server/k8s-manifests/infrapilot-server/
 kubectl apply -f web/k8s-manifests/
 ```
 
-### 5.2 配置密钥
+### 6.2 配置密钥
 
 编辑：
 
@@ -147,7 +179,7 @@ kubectl apply -f web/k8s-manifests/
 kubectl apply -f server/k8s-manifests/infrapilot-server/secret.yaml
 ```
 
-### 5.3 配置 MCP endpoint 映射（可选）
+### 6.3 配置 MCP endpoint 映射（可选）
 
 编辑 `server/k8s-manifests/infrapilot-server/configmap.yaml`：
 
@@ -161,7 +193,7 @@ MCP_ENDPOINTS: |-
 
 > `linux-mcp-server` DaemonSet 默认使用 `hostNetwork: true` + `hostPort: 8443`，因此可直接使用节点 IP。
 
-### 4.4 部署 linux-mcp-server 常驻 Agent
+### 5.4 部署 linux-mcp-server 常驻 Agent
 
 ```bash
 kubectl apply -f server/k8s-manifests/linux-mcp-server/
@@ -183,7 +215,7 @@ kubectl get svc -n infrapilot
 后端服务名：`infrapilot-server:8787`  
 前端服务名：`infrapilot-web:80`
 
-## 6. 访问前端
+## 7. 访问前端
 
 在集群内可通过 port-forward 临时访问：
 
@@ -200,7 +232,7 @@ kubectl port-forward -n infrapilot svc/infrapilot-web 8080:80
 - **OpenSearch**：LogShipper 默认向 `http://opensearch:9200` 推送日志（可通过环境变量覆盖）。如需使用 ELK Skill，请确保集群内存在可访问的 OpenSearch 服务。
 - **ClickHouse**：ClickHouse Skill 默认自动发现 `clickhouse.islap.svc.cluster.local`。若 ClickHouse 部署在 `islap` 命名空间，无需额外配置。
 
-## 7. 远程设备命令执行
+## 9. 远程设备命令执行
 
 部署后，Linux Skill 支持三种执行通道：
 
@@ -210,7 +242,7 @@ kubectl port-forward -n infrapilot svc/infrapilot-web 8080:80
 
 SSH 主机注册表可通过 `SSH_HOSTS` 环境变量或 `SSH_HOSTS_CONFIG` 配置，详见 `docs/ssh-proxy-linux-remote.md`。
 
-## 9. 升级与回滚
+## 10. 升级与回滚
 
 升级服务端：
 

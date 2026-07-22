@@ -19,6 +19,9 @@ service LinuxDiagnostic {
   rpc GetProcessInfo(ProcessRequest) returns (ProcessResponse);
   rpc TailSyslog(SyslogRequest) returns (SyslogResponse);
 
+  // 通用只读命令执行（白名单控制，便于扩展 cat/less/kubectl 等运维命令）
+  rpc RunCommand(RunCommandRequest) returns (RunCommandResponse);
+
   // 变更类工具（需 Command Gateway 审批 + server 侧白名单）
   rpc RestartService(ServiceRequest) returns (ServiceResponse);
   rpc KillProcess(KillRequest) returns (KillResponse);
@@ -201,6 +204,26 @@ message KillRequest {
 }
 
 message KillResponse {
+  bool success = 1;
+  string stdout = 2;
+  string stderr = 3;
+  int32 exit_code = 4;
+  string error = 5;
+  int32 duration_ms = 6;
+}
+
+// ----------------------------------------------------------------------------
+// Generic command runner (readonly + allowlist)
+// ----------------------------------------------------------------------------
+
+message RunCommandRequest {
+  string host = 1;
+  string command = 2;
+  repeated string args = 3;
+  int32 timeout_ms = 4; // 默认 10000ms
+}
+
+message RunCommandResponse {
   bool success = 1;
   string stdout = 2;
   string stderr = 3;

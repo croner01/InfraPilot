@@ -125,6 +125,26 @@ describe("linux-mcp-server service integration", () => {
     expect(res.error).toContain("信号");
   });
 
+  it("RunCommand executes allowed command", async () => {
+    const res = await grpcMcpClient.call(endpoint, {
+      tool: "run_command",
+      args: { host: "local", command: "uname", args: ["-a"] },
+      caller: "test",
+    });
+    expect(res.success).toBe(true);
+    expect(res.stdout).toBeTruthy();
+  });
+
+  it("RunCommand rejects disallowed command", async () => {
+    const res = await grpcMcpClient.call(endpoint, {
+      tool: "run_command",
+      args: { host: "local", command: "rm", args: ["-rf", "/tmp"] },
+      caller: "test",
+    });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain("不在白名单中");
+  });
+
   it("returns UNAUTHENTICATED when token is missing", async () => {
     const client = getLinuxDiagnosticClient(target, grpc.credentials.createInsecure());
     return new Promise<void>((resolve, reject) => {

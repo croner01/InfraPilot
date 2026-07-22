@@ -14,6 +14,7 @@ import {
   tailSyslog,
   restartService,
   killProcess,
+  runCommand,
 } from "./runner.js";
 
 function writeAudit(tool: string, success: boolean, error: string | undefined, durationMs: number) {
@@ -100,6 +101,28 @@ export const linuxDiagnosticService = {
       const req = call.request;
       const result = await tailSyslog(req.lines ?? 20);
       finish(callback, { ...result, duration_ms: Date.now() - start }, "tail_syslog", start, result.error);
+    }
+  ),
+
+  runCommand: createAuthMiddleware<any, any>("run_command")(
+    async (call, callback) => {
+      const start = Date.now();
+      const req = call.request;
+      const result = await runCommand(req.command ?? "", req.args ?? [], req.timeout_ms ?? 10000);
+      finish(
+        callback,
+        {
+          success: result.success,
+          stdout: result.stdout,
+          stderr: result.stderr,
+          exit_code: result.code,
+          error: result.error,
+          duration_ms: Date.now() - start,
+        },
+        "run_command",
+        start,
+        result.error
+      );
     }
   ),
 

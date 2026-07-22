@@ -9,8 +9,21 @@ import { linuxTools } from "../skills/linux/tools.js";
 import { k8sTools } from "../skills/k8s/tools.js";
 import { elkTools } from "../skills/elk/tools.js";
 import { clickhouseTools } from "../skills/clickhouse/tools.js";
+import { traceTools } from "../skills/trace/tools.js";
+import { knowledgeTools } from "../skills/knowledge/tools.js";
+import { topologyTools } from "../skills/topology/tools.js";
+import { openstackTools } from "../skills/openstack/tools.js";
 
-export const ALL_TOOLS: ToolDef[] = [...linuxTools, ...k8sTools, ...elkTools, ...clickhouseTools];
+export const ALL_TOOLS: ToolDef[] = [
+  ...linuxTools,
+  ...k8sTools,
+  ...elkTools,
+  ...clickhouseTools,
+  ...traceTools,
+  ...knowledgeTools,
+  ...topologyTools,
+  ...openstackTools,
+];
 
 export function findTool(skill: SkillName, tool: string): ToolDef | undefined {
   return ALL_TOOLS.find((t) => t.skill === skill && t.name === tool);

@@ -1,10 +1,13 @@
 // ============================================================================
 // MCP Agent Discovery
 //
-// 根据 host 别名决定：
+// 当前实现：
 // 1. 优先查找 MCP_ENDPOINTS 环境变量中的 gRPC target
 // 2. 否则尝试 SSH Host Registry 作为 fallback
 // 3. 变更类命令不会自动降级到 SSH（安全策略）
+//
+// 注：Headless Service DNS 自动发现（通过 K8s DNS 解析 linux-mcp-server Pod）
+// 已评估但优先级标记为低，暂不实现；后续如需扩展，可在此模块增加 DNS SRV/A 记录解析。
 // ============================================================================
 
 import { loadHostRegistry, findHost } from "../gateway/sshHosts.js";

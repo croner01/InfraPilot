@@ -118,6 +118,33 @@ describe("linux tools", () => {
       expect(res.stdout).toContain("TCP");
       expect(mocked).toHaveBeenCalledWith("local", "ss", ["-s"], expect.any(Object));
     });
+
+    it("run_command validates allowlist before local execution", async () => {
+      const mocked = executeOnHost as ReturnType<typeof vi.fn>;
+      mocked.mockResolvedValue({ success: true, stdout: "ok", stderr: "", durationMs: 10 });
+
+      const res = await executeLinuxTool("run_command", { host: "local", command: "cat", args: ["/etc/os-release"] });
+      expect(res.success).toBe(true);
+      expect(mocked).toHaveBeenCalledWith("local", "cat", ["/etc/os-release"], expect.any(Object));
+    });
+
+    it("run_command rejects disallowed command locally", async () => {
+      const mocked = executeOnHost as ReturnType<typeof vi.fn>;
+      const res = await executeLinuxTool("run_command", { host: "local", command: "rm", args: ["-rf", "/"] });
+      expect(res.success).toBe(false);
+      expect(res.error).toContain("不在白名单中");
+      expect(mocked).not.toHaveBeenCalled();
+    });
+
+    it("read_file uses cat locally", async () => {
+      const mocked = executeOnHost as ReturnType<typeof vi.fn>;
+      mocked.mockResolvedValue({ success: true, stdout: "file content", stderr: "", durationMs: 10 });
+
+      const res = await executeLinuxTool("read_file", { host: "local", path: "/tmp/a.log" });
+      expect(res.success).toBe(true);
+      expect(res.stdout).toBe("file content");
+      expect(mocked).toHaveBeenCalledWith("local", "cat", ["/tmp/a.log"], expect.any(Object));
+    });
   });
 
   describe("remote execution", () => {
@@ -177,6 +204,21 @@ describe("linux tools", () => {
       const res = await executeLinuxTool("get_cpu_usage", { host: "node-1" });
       expect(res.success).toBe(false);
       expect(res.error).toContain("boom");
+    });
+
+    it("read_file routes to MCP Client Router", async () => {
+      const mocked = executeLinuxToolOnHost as ReturnType<typeof vi.fn>;
+      mocked.mockResolvedValue({ success: true, stdout: "remote file", durationMs: 20 });
+
+      const res = await executeLinuxTool("read_file", { host: "node-1", path: "/var/log/messages" });
+      expect(res.success).toBe(true);
+      expect(mocked).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tool: "read_file",
+          args: { host: "node-1", path: "/var/log/messages" },
+          timeoutMs: 10000,
+        })
+      );
     });
   });
 

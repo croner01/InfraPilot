@@ -3,9 +3,12 @@
 // 对应设计文档 3.3 State 数据结构 / 5.3 MCP 消息结构 / 8.2 风险分级
 // ============================================================================
 
+import type OpenAI from "openai";
+
 export type RiskLevel = "readonly" | "low" | "medium" | "high" | "critical";
 
-export type SkillName = "linux" | "k8s" | "elk" | "clickhouse" | "openstack";
+export type SkillName = "linux" | "k8s" | "elk" | "clickhouse" | "openstack"
+  | "trace" | "knowledge" | "topology";
 
 export interface ToolDef {
   name: string;
@@ -56,6 +59,7 @@ export interface PendingToolCall {
   approvalId?: string;
   approved?: boolean;
   rejected?: boolean;
+  argsHash?: string;
 }
 
 export interface ExecutedToolCall extends PendingToolCall {
@@ -118,7 +122,10 @@ export type TimelineEventType =
   | "assistant_message"
   | "status"
   | "error"
-  | "done";
+  | "done"
+  | "knowledge_case_added"
+  | "checkpoint_saved"
+  | "runner_resumed";
 
 export interface TimelineEvent {
   id: string;
@@ -155,4 +162,77 @@ export interface AgentSession {
   remediation?: Remediation;
   iteration: number;
   maxIterations: number;
+}
+
+// -------------------- Agent Checkpoint（LangGraph Checkpoint 语义） --------------------
+
+export interface AgentCheckpoint {
+  sessionId: string;
+  history: OpenAI.Chat.Completions.ChatCompletionMessageParam[];
+  iteration: number;
+  status: SessionStatus;
+  pendingToolCall?: PendingToolCall;
+  lastToolResults?: ExecutedToolCall[];
+  createdAt: string;
+}
+
+// ── Logoscope 集成类型 ──
+
+export interface TraceSpan {
+  spanId: string;
+  traceId: string;
+  parentSpanId: string | null;
+  serviceName: string;
+  operationName: string;
+  startTime: string;
+  durationMs: number;
+  status: 'OK' | 'ERROR';
+  attributes?: Record<string, string>;
+}
+
+export interface TraceAnalysis {
+  traceId: string;
+  totalDurationMs: number;
+  spans: TraceSpan[];
+  errorSpans: TraceSpan[];
+  slowSpans: TraceSpan[];
+  serviceMap: Record<string, string[]>;  // service → dependent services
+}
+
+export interface KnowledgeCaseInput {
+  title: string;
+  problemType: string; // e.g. "OOMKilled", "NoValidHost", "网络不通"
+  severity: "p0" | "p1" | "p2" | "p3";
+  summary: string; // 问题现象
+  rootCauses: string[]; // 根因列表
+  solutions: string[]; // 解决方案/SOP 步骤
+  serviceName?: string; // 关联服务/组件
+  tags?: string[]; // 人工标签
+  sourceSessionId?: string; // 来源会话
+}
+
+export interface KnowledgeCase extends KnowledgeCaseInput {
+  id: string;
+  createdAt: string;
+  resolved: boolean;
+}
+
+
+
+export interface TopologyNode {
+  id: string;
+  name: string;
+  type: string;
+  namespace?: string;
+}
+
+export interface TopologyEdge {
+  source: string;
+  target: string;
+  type: string;
+}
+
+export interface TopologyGraph {
+  nodes: TopologyNode[];
+  edges: TopologyEdge[];
 }

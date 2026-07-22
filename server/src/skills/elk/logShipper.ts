@@ -52,6 +52,45 @@ function parseShipTargets(): ShipTarget[] {
 
 export const SHIP_TARGETS = parseShipTargets();
 
+/**
+ * 根据 namespace / index_prefix 解析应查询的 OpenSearch index pattern。
+ * - 显式指定 index_prefix 时优先使用
+ * - 指定 namespace 时匹配 LOG_SHIP_TARGETS 中对应 target 的 indexPrefix
+ * - 未指定时聚合所有 target 的 indexPrefix，支持跨命名空间查询
+ * - 无任何 target 时回退到默认 order-api-logs-*
+ */
+export function resolveIndexPattern(options?: {
+  namespace?: string;
+  index_prefix?: string;
+  all?: boolean;
+}): string {
+  const { namespace, index_prefix, all } = options ?? {};
+
+  if (index_prefix) {
+    return `${index_prefix}-*`;
+  }
+
+  const targets = SHIP_TARGETS ?? [];
+  let matched = targets;
+
+  if (namespace) {
+    matched = targets.filter((t) => t.namespace === namespace);
+    if (matched.length === 0) {
+      console.warn(`[elk] 未找到 namespace=${namespace} 对应的采集目标,回退到全部索引`);
+      matched = targets;
+    }
+  } else if (!all) {
+    // 默认未指定 namespace 时仍然查询全部已配置 target，保持与先前行为一致
+    matched = targets;
+  }
+
+  const patterns = Array.from(new Set(matched.map((t) => `${t.indexPrefix}-*`)));
+  if (patterns.length === 0) {
+    return "order-api-logs-*";
+  }
+  return patterns.join(",");
+}
+
 function todayIndex(prefix: string): string {
   const d = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
   return `${prefix}-${d}`;

@@ -5,6 +5,7 @@
 import { execFile } from "node:child_process";
 import fs from "node:fs";
 import { redact } from "../../gateway/redact.js";
+import { isCommandAllowed, isServiceAllowed, isSignalAllowed, sanitizePattern } from "./allowlist.js";
 
 export interface RunResult {
   success: boolean;
@@ -287,13 +288,23 @@ export async function tailSyslog(lines = 20): Promise<{
 }
 
 // ----------------------------------------------------------------------------
+// Generic command runner (readonly + allowlist)
+// ----------------------------------------------------------------------------
+
+export async function runCommand(command: string, args: string[], timeoutMs = 10000): Promise<RunResult> {
+  const check = isCommandAllowed(command, args);
+  if (!check.allowed) {
+    return { success: false, stdout: "", stderr: "", code: 1, durationMs: 0, error: check.reason };
+  }
+  return run(command, args, timeoutMs);
+}
+
+// ----------------------------------------------------------------------------
 // Service restart
 // ----------------------------------------------------------------------------
 
-const ALLOWED_SERVICES = new Set(["nginx", "docker", "containerd", "kubelet", "sshd", "cron"]);
-
 export async function restartService(serviceName: string): Promise<RunResult> {
-  if (!ALLOWED_SERVICES.has(serviceName)) {
+  if (!isServiceAllowed(serviceName)) {
     return { success: false, stdout: "", stderr: "", code: 1, durationMs: 0, error: `服务 ${serviceName} 不在允许重启列表中` };
   }
   return run("systemctl", ["restart", serviceName], 30000);
@@ -303,10 +314,8 @@ export async function restartService(serviceName: string): Promise<RunResult> {
 // Process kill
 // ----------------------------------------------------------------------------
 
-const ALLOWED_SIGNALS = new Set(["SIGTERM", "SIGHUP", "SIGUSR1", "SIGUSR2"]);
-
 export async function killProcess(pid: number, signal = "SIGTERM"): Promise<RunResult> {
-  if (!ALLOWED_SIGNALS.has(signal)) {
+  if (!isSignalAllowed(signal)) {
     return { success: false, stdout: "", stderr: "", code: 1, durationMs: 0, error: `信号 ${signal} 不在允许列表中` };
   }
   if (pid <= 0) {

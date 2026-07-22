@@ -10,7 +10,12 @@ import { executeLinuxTool } from "../skills/linux/tools.js";
 import { executeK8sTool } from "../skills/k8s/tools.js";
 import { executeElkTool } from "../skills/elk/tools.js";
 import { executeClickhouseTool } from "../skills/clickhouse/tools.js";
-import { insertAudit } from "../db/db.js";
+import { executeTraceTool } from "../skills/trace/tools.js";
+import { executeKnowledgeTool } from "../skills/knowledge/tools.js";
+import { executeTopologyTool } from "../skills/topology/tools.js";
+import { executeOpenStackTool } from "../skills/openstack/tools.js";
+import { insertAudit, getApproval } from "../db/db.js";
+import { computeArgsHash } from "./argsHash.js";
 
 async function dispatch(skill: string, tool: string, args: Record<string, unknown>): Promise<ToolExecutionResult> {
   switch (skill) {
@@ -22,6 +27,14 @@ async function dispatch(skill: string, tool: string, args: Record<string, unknow
       return executeElkTool(tool, args);
     case "clickhouse":
       return executeClickhouseTool(tool, args);
+    case "trace":
+      return executeTraceTool(tool, args);
+    case "knowledge":
+      return executeKnowledgeTool(tool, args);
+    case "topology":
+      return executeTopologyTool(tool, args);
+    case "openstack":
+      return executeOpenStackTool(tool, args);
     default:
       return { success: false, error: `未知skill: ${skill}`, durationMs: 0 };
   }
@@ -51,6 +64,39 @@ export async function executeToolCall(pendingCall: PendingToolCall, opts: Execut
     };
     writeAudit(pendingCall, opts, result, startedAt);
     return result;
+  }
+
+  // 对需审批的调用进行 approval 记录与 argsHash 一致性校验，防止 TOCTOU 篡改
+  if (pendingCall.risk.requiresApproval && pendingCall.approvalId) {
+    const approval = getApproval(pendingCall.approvalId);
+    if (!approval) {
+      const result: ToolExecutionResult = {
+        success: false,
+        error: "审批记录不存在，已拒绝执行",
+        durationMs: Date.now() - start,
+      };
+      writeAudit(pendingCall, opts, result, startedAt);
+      return result;
+    }
+    if (approval.decision !== "approved") {
+      const result: ToolExecutionResult = {
+        success: false,
+        error: `审批记录状态为 ${approval.decision}，已拒绝执行`,
+        durationMs: Date.now() - start,
+      };
+      writeAudit(pendingCall, opts, result, startedAt);
+      return result;
+    }
+    const currentHash = computeArgsHash(pendingCall.skill, pendingCall.tool, pendingCall.args);
+    if (approval.args_hash !== currentHash) {
+      const result: ToolExecutionResult = {
+        success: false,
+        error: "审批令牌与当前命令参数不匹配，可能存在篡改，已拒绝执行",
+        durationMs: Date.now() - start,
+      };
+      writeAudit(pendingCall, opts, result, startedAt);
+      return result;
+    }
   }
 
   const result = await dispatch(pendingCall.skill, pendingCall.tool, pendingCall.args);

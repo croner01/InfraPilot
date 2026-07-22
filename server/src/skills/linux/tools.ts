@@ -14,6 +14,7 @@ import { executeOnHost } from "./remoteExecutor.js";
 import { executeLinuxToolOnHost } from "../../mcp/client.js";
 import { linuxAgentTools } from "./agentTools.js";
 import { redact } from "../../gateway/redact.js";
+import { isCommandAllowed } from "../../mcp/server/allowlist.js";
 
 export const linuxTools: ToolDef[] = [
   {
@@ -174,9 +175,72 @@ async function executeLocalLinuxTool(tool: string, args: Record<string, unknown>
       const result = await executeOnHost("local", "ss", ["-s"], { timeoutMs: 8000 });
       return { success: result.success, stdout: result.stdout, stderr: result.stderr, error: result.error, durationMs: Date.now() - start };
     }
+    case "run_command": {
+      const command = String(args.command ?? "");
+      const cmdArgs = Array.isArray(args.args) ? args.args.map(String) : [];
+      const check = isCommandAllowed(command, cmdArgs);
+      if (!check.allowed) {
+        return { success: false, error: check.reason, durationMs: Date.now() - start };
+      }
+      const result = await executeOnHost("local", command, cmdArgs, { timeoutMs: Number(args.timeout_ms ?? 10000) });
+      return { success: result.success, stdout: result.stdout, stderr: result.stderr, error: result.error, durationMs: Date.now() - start };
+    }
+    case "read_file": {
+      const result = await executeOnHost("local", "cat", [String(args.path ?? "")], { timeoutMs: 10000 });
+      return { success: result.success, stdout: result.stdout, stderr: result.stderr, error: result.error, durationMs: Date.now() - start };
+    }
+    case "tail_file": {
+      const lines = String(args.lines ?? 20);
+      const result = await executeOnHost("local", "tail", ["-n", lines, String(args.path ?? "")], { timeoutMs: 10000 });
+      return { success: result.success, stdout: result.stdout, stderr: result.stderr, error: result.error, durationMs: Date.now() - start };
+    }
+    case "list_directory": {
+      const result = await executeOnHost("local", "ls", ["-la", String(args.path ?? ".")], { timeoutMs: 8000 });
+      return { success: result.success, stdout: result.stdout, stderr: result.stderr, error: result.error, durationMs: Date.now() - start };
+    }
+    case "check_service_status": {
+      const result = await executeOnHost("local", "systemctl", ["status", String(args.service_name ?? "")], { timeoutMs: 10000 });
+      return { success: result.success, stdout: result.stdout, stderr: result.stderr, error: result.error, durationMs: Date.now() - start };
+    }
+    case "get_kubernetes_resource": {
+      const kubectlArgs = buildKubectlArgs("get", args);
+      const result = await executeOnHost("local", "kubectl", kubectlArgs, { timeoutMs: 15000 });
+      return { success: result.success, stdout: result.stdout, stderr: result.stderr, error: result.error, durationMs: Date.now() - start };
+    }
+    case "describe_kubernetes_resource": {
+      const kubectlArgs = buildKubectlArgs("describe", args);
+      const result = await executeOnHost("local", "kubectl", kubectlArgs, { timeoutMs: 15000 });
+      return { success: result.success, stdout: result.stdout, stderr: result.stderr, error: result.error, durationMs: Date.now() - start };
+    }
+    case "get_pod_logs": {
+      const kubectlArgs = buildKubectlLogArgs(args);
+      const result = await executeOnHost("local", "kubectl", kubectlArgs, { timeoutMs: 15000 });
+      return { success: result.success, stdout: result.stdout, stderr: result.stderr, error: result.error, durationMs: Date.now() - start };
+    }
     default:
       return { success: false, error: `本地不支持的linux工具: ${tool}`, durationMs: Date.now() - start };
   }
+}
+
+function buildKubectlArgs(subCommand: string, args: Record<string, unknown>): string[] {
+  const out: string[] = [subCommand];
+  if (args.namespace) out.push("-n", String(args.namespace));
+  if (args.all_namespaces) out.push("--all-namespaces");
+  out.push(String(args.resource ?? "pods"));
+  if (args.name) out.push(String(args.name));
+  if (args.output) out.push("-o", String(args.output));
+  return out;
+}
+
+function buildKubectlLogArgs(args: Record<string, unknown>): string[] {
+  const out: string[] = ["logs"];
+  if (args.namespace) out.push("-n", String(args.namespace));
+  out.push(String(args.pod_name ?? ""));
+  if (args.container) out.push("-c", String(args.container));
+  if (args.tail_lines !== undefined) out.push("--tail", String(args.tail_lines));
+  if (args.previous) out.push("--previous");
+  if (args.since) out.push("--since", String(args.since));
+  return out;
 }
 
 export async function executeLinuxTool(tool: string, args: Record<string, unknown>): Promise<ToolExecutionResult> {

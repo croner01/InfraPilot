@@ -1,6 +1,9 @@
 // ============================================================================
 // Session Store — 会话状态管理 + 时间线事件广播
 // 对应设计文档 §3.3 AgentState / §13.4 Checkpoint持久化(demo简化为内存+SQLite)
+//
+// 审批状态已完全持久化到 SQLite approvals 表，不再使用内存 Promise resolver。
+// 审批到达后由 /approve 接口写入数据库并触发 resumeAgentTurn。
 // ============================================================================
 
 import { EventEmitter } from "node:events";
@@ -11,9 +14,6 @@ import { upsertSession, getSession as dbGetSession, listSessions as dbListSessio
 const sessions = new Map<string, AgentSession>();
 export const bus = new EventEmitter();
 bus.setMaxListeners(200);
-
-// 用于审批中断/恢复的 pending resolver —— 对应 LangGraph 的 interrupt()/Command(resume=...)
-const pendingApprovals = new Map<string, (decision: { approved: boolean; approvedBy: string }) => void>();
 
 export function createSession(title: string): AgentSession {
   const session: AgentSession = {
@@ -58,6 +58,15 @@ export function updateSession(id: string, mutator: (s: AgentSession) => void) {
   return session;
 }
 
+export function terminateSession(id: string): AgentSession | undefined {
+  const session = getSession(id);
+  if (!session) return undefined;
+  session.status = "closed";
+  session.updatedAt = new Date().toISOString();
+  persist(session);
+  return session;
+}
+
 function persist(session: AgentSession) {
   upsertSession(session.id, session.title, session.status, JSON.stringify(session));
 }
@@ -72,20 +81,4 @@ export function emitEvent(sessionId: string, type: TimelineEventType, payload: u
   };
   bus.emit("event", event);
   return event;
-}
-
-export function waitForApprovalDecision(approvalId: string): Promise<{ approved: boolean; approvedBy: string }> {
-  return new Promise((resolve) => {
-    pendingApprovals.set(approvalId, resolve);
-  });
-}
-
-export function resolveApprovalDecision(approvalId: string, decision: { approved: boolean; approvedBy: string }) {
-  const resolver = pendingApprovals.get(approvalId);
-  if (resolver) {
-    resolver(decision);
-    pendingApprovals.delete(approvalId);
-    return true;
-  }
-  return false;
 }

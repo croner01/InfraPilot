@@ -47,6 +47,7 @@ CREATE TABLE IF NOT EXISTS approvals (
   skill TEXT NOT NULL,
   tool TEXT NOT NULL,
   args TEXT NOT NULL,
+  args_hash TEXT NOT NULL,
   risk_level TEXT NOT NULL,
   diff_preview TEXT,
   decision TEXT NOT NULL DEFAULT 'pending',
@@ -61,9 +62,42 @@ CREATE TABLE IF NOT EXISTS incident_cases (
   root_cause_summary TEXT NOT NULL,
   root_cause_category TEXT,
   resolution_steps TEXT,
-  created_at TEXT NOT NULL
+  created_at TEXT NOT NULL,
+  problem_type TEXT,
+  severity TEXT,
+  solutions TEXT,
+  tags TEXT,
+  source_session_id TEXT,
+  embedding TEXT
+);
+
+CREATE TABLE IF NOT EXISTS session_checkpoints (
+  session_id TEXT PRIMARY KEY,
+  checkpoint_json TEXT NOT NULL,
+  updated_at TEXT NOT NULL
 );
 `);
+
+function addColumnIfMissing(table: string, column: string, definition: string) {
+  const columns = db.pragma(`table_info(${table})`) as Array<{ name: string }>;
+  if (!columns.some((c) => c.name === column)) {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+  }
+}
+
+// 迁移：为旧版 incident_cases 表补充 Knowledge Skill 所需字段
+addColumnIfMissing("incident_cases", "problem_type", "TEXT");
+addColumnIfMissing("incident_cases", "severity", "TEXT");
+addColumnIfMissing("incident_cases", "solutions", "TEXT");
+addColumnIfMissing("incident_cases", "tags", "TEXT");
+addColumnIfMissing("incident_cases", "source_session_id", "TEXT");
+addColumnIfMissing("incident_cases", "embedding", "TEXT");
+
+// 迁移：为旧版 approvals 表补充 args_hash 列（任务二引入的 TOCTOU 防护）
+const approvalColumns = db.pragma("table_info(approvals)") as Array<{ name: string }>;
+if (!approvalColumns.some((c) => c.name === "args_hash")) {
+  db.exec(`ALTER TABLE approvals ADD COLUMN args_hash TEXT NOT NULL DEFAULT ''`);
+}
 
 export interface AuditRow {
   id: string;
@@ -115,12 +149,12 @@ export function listSessions() {
 }
 
 export function insertApproval(row: {
-  id: string; sessionId: string; skill: string; tool: string; args: string; riskLevel: string; diffPreview: string;
+  id: string; sessionId: string; skill: string; tool: string; args: string; argsHash: string; riskLevel: string; diffPreview: string;
 }) {
   db.prepare(`
-    INSERT INTO approvals (id, session_id, skill, tool, args, risk_level, diff_preview, decision, requested_at)
+    INSERT INTO approvals (id, session_id, skill, tool, args, args_hash, risk_level, diff_preview, decision, requested_at)
     VALUES (?,?,?,?,?,?,?, 'pending', ?)
-  `).run(row.id, row.sessionId, row.skill, row.tool, row.args, row.riskLevel, row.diffPreview, new Date().toISOString());
+  `).run(row.id, row.sessionId, row.skill, row.tool, row.args, row.argsHash, row.riskLevel, row.diffPreview, new Date().toISOString());
 }
 
 export function decideApproval(id: string, decision: "approved" | "rejected", decidedBy: string) {
@@ -129,17 +163,98 @@ export function decideApproval(id: string, decision: "approved" | "rejected", de
   );
 }
 
-export function getApproval(id: string) {
-  return db.prepare(`SELECT * FROM approvals WHERE id = ?`).get(id) as any;
+export interface ApprovalRow {
+  id: string;
+  session_id: string;
+  skill: string;
+  tool: string;
+  args: string;
+  args_hash: string;
+  risk_level: string;
+  diff_preview: string;
+  decision: "pending" | "approved" | "rejected";
+  requested_at: string;
+  decided_at?: string;
+  decided_by?: string;
 }
 
-export function insertCase(row: { id: string; title: string; rootCauseSummary: string; rootCauseCategory: string; resolutionSteps: string }) {
+export function getApproval(id: string): ApprovalRow | undefined {
+  return db.prepare(`SELECT * FROM approvals WHERE id = ?`).get(id) as ApprovalRow | undefined;
+}
+
+export interface CaseRow {
+  id: string;
+  title: string;
+  root_cause_summary: string;
+  root_cause_category?: string;
+  resolution_steps?: string;
+  created_at: string;
+  problem_type?: string;
+  severity?: string;
+  solutions?: string;
+  tags?: string;
+  source_session_id?: string;
+  embedding?: string;
+}
+
+export function insertCase(row: CaseRow) {
   db.prepare(`
-    INSERT INTO incident_cases (id, title, root_cause_summary, root_cause_category, resolution_steps, created_at)
-    VALUES (?,?,?,?,?,?)
-  `).run(row.id, row.title, row.rootCauseSummary, row.rootCauseCategory, row.resolutionSteps, new Date().toISOString());
+    INSERT INTO incident_cases (
+      id, title, root_cause_summary, root_cause_category, resolution_steps, created_at,
+      problem_type, severity, solutions, tags, source_session_id, embedding
+    )
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+  `).run(
+    row.id,
+    row.title,
+    row.root_cause_summary,
+    row.root_cause_category ?? null,
+    row.resolution_steps ?? null,
+    row.created_at,
+    row.problem_type ?? null,
+    row.severity ?? null,
+    row.solutions ?? null,
+    row.tags ?? null,
+    row.source_session_id ?? null,
+    row.embedding ?? null
+  );
 }
 
-export function listCases() {
-  return db.prepare(`SELECT * FROM incident_cases ORDER BY created_at DESC LIMIT 20`).all();
+export function getCase(id: string): CaseRow | undefined {
+  return db.prepare(`SELECT * FROM incident_cases WHERE id = ?`).get(id) as CaseRow | undefined;
+}
+
+export function listCases(): CaseRow[] {
+  return db.prepare(`SELECT * FROM incident_cases ORDER BY created_at DESC LIMIT 200`).all() as CaseRow[];
+}
+
+// -------------------- session_checkpoints（LangGraph Checkpoint 持久化） --------------------
+
+export function saveCheckpoint(sessionId: string, checkpointJson: string) {
+  const now = new Date().toISOString();
+  db.prepare(`
+    INSERT INTO session_checkpoints (session_id, checkpoint_json, updated_at)
+    VALUES (?, ?, ?)
+    ON CONFLICT(session_id) DO UPDATE SET checkpoint_json=excluded.checkpoint_json, updated_at=excluded.updated_at
+  `).run(sessionId, checkpointJson, now);
+}
+
+export function loadCheckpoint(sessionId: string): { checkpoint_json: string } | undefined {
+  return db.prepare(`SELECT checkpoint_json FROM session_checkpoints WHERE session_id = ?`).get(sessionId) as
+    | { checkpoint_json: string }
+    | undefined;
+}
+
+export function deleteCheckpoint(sessionId: string) {
+  db.prepare(`DELETE FROM session_checkpoints WHERE session_id = ?`).run(sessionId);
+}
+
+export function listAwaitingApprovalSessions(): { id: string; title: string; status: string; created_at: string; updated_at: string }[] {
+  return db.prepare(`SELECT id, title, status, created_at, updated_at FROM sessions WHERE status = 'awaiting_approval' ORDER BY updated_at DESC`).all() as {
+    id: string;
+    title: string;
+    status: string;
+    created_at: string;
+    updated_at: string;
+  }[];
 }

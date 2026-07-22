@@ -11,10 +11,23 @@
 // ============================================================================
 
 import { ToolDef, ToolExecutionResult } from "../../types.js";
-import { osClient } from "./logShipper.js";
+import { osClient, resolveIndexPattern } from "./logShipper.js";
 import { redact } from "../../gateway/redact.js";
 
-const INDEX_PATTERN = "order-api-logs-*";
+interface SearchOptions {
+  namespace?: string;
+  index_prefix?: string;
+}
+
+function buildIndexPattern(options?: SearchOptions): string {
+  return resolveIndexPattern({ namespace: options?.namespace, index_prefix: options?.index_prefix });
+}
+
+function addNamespaceFilter(must: unknown[], namespace?: string): void {
+  if (namespace) {
+    must.push({ term: { namespace } });
+  }
+}
 
 interface LogRecord {
   "@timestamp": string;
@@ -37,10 +50,12 @@ export const elkTools: ToolDef[] = [
     name: "search_logs",
     skill: "elk",
     risk: "readonly",
-    description: "按service/level/关键字/时间窗口检索日志(对真实OpenSearch索引发起查询)",
+    description: "按namespace/service/level/关键字/时间窗口检索日志(对真实OpenSearch索引发起查询)。支持通过namespace自动匹配索引,也可显式指定index_prefix。",
     parameters: {
       type: "object",
       properties: {
+        namespace: { type: "string", description: "可选,如 order-service / islap,留空表示跨所有命名空间" },
+        index_prefix: { type: "string", description: "可选,显式指定索引前缀(优先级高于namespace),如 order-api-logs" },
         service: { type: "string" },
         level: { type: "string", description: "INFO|WARN|ERROR, 留空表示不过滤" },
         keyword: { type: "string", description: "可选,消息内容关键字过滤" },
@@ -54,10 +69,14 @@ export const elkTools: ToolDef[] = [
     name: "aggregate_by_field",
     skill: "elk",
     risk: "readonly",
-    description: "按字段(如level)聚合计数,用于快速了解日志整体分布,避免逐条阅读全量日志",
+    description: "按字段(如level)聚合计数,用于快速了解日志整体分布。支持通过namespace或index_prefix限定目标索引。",
     parameters: {
       type: "object",
-      properties: { field: { type: "string", description: "如 'level' 或 'service'" } },
+      properties: {
+        field: { type: "string", description: "如 'level' 或 'service'" },
+        namespace: { type: "string", description: "可选,限定命名空间" },
+        index_prefix: { type: "string", description: "可选,显式指定索引前缀" },
+      },
       required: ["field"],
       additionalProperties: false,
     },
@@ -66,22 +85,39 @@ export const elkTools: ToolDef[] = [
     name: "get_error_timeline",
     skill: "elk",
     risk: "readonly",
-    description: "获取ERROR/WARN级别日志按时间排序的时间线,用于判断故障演化过程(何时开始恶化/何时崩溃)",
-    parameters: { type: "object", properties: {}, required: [], additionalProperties: false },
+    description: "获取ERROR/WARN级别日志按时间排序的时间线。支持通过namespace或index_prefix限定目标索引。",
+    parameters: {
+      type: "object",
+      properties: {
+        namespace: { type: "string", description: "可选,限定命名空间" },
+        index_prefix: { type: "string", description: "可选,显式指定索引前缀" },
+      },
+      required: [],
+      additionalProperties: false,
+    },
   },
   {
     name: "cluster_similar_errors",
     skill: "elk",
     risk: "readonly",
-    description: "对错误/警告日志做模板聚类,合并相似错误,返回每类错误的出现次数/首次末次时间/样例,避免逐条阅读",
-    parameters: { type: "object", properties: {}, required: [], additionalProperties: false },
+    description: "对错误/警告日志做模板聚类。支持通过namespace或index_prefix限定目标索引。",
+    parameters: {
+      type: "object",
+      properties: {
+        namespace: { type: "string", description: "可选,限定命名空间" },
+        index_prefix: { type: "string", description: "可选,显式指定索引前缀" },
+      },
+      required: [],
+      additionalProperties: false,
+    },
   },
 ];
 
-async function searchRecords(query: unknown, size: number): Promise<LogRecord[]> {
+async function searchRecords(query: unknown, size: number, options?: SearchOptions): Promise<LogRecord[]> {
+  const index = buildIndexPattern(options);
   try {
     const res: any = await osClient.search({
-      index: INDEX_PATTERN,
+      index,
       body: {
         query: query as any,
         sort: [{ "@timestamp": { order: "asc" } }],
@@ -101,26 +137,31 @@ export async function executeElkTool(tool: string, args: Record<string, unknown>
   try {
     switch (tool) {
       case "search_logs": {
-        const { service, level, keyword, limit = 20 } = args as {
-          service?: string; level?: string; keyword?: string; limit?: number;
+        const { namespace, index_prefix, service, level, keyword, limit = 20 } = args as {
+          namespace?: string; index_prefix?: string; service?: string; level?: string; keyword?: string; limit?: number;
         };
+        const searchOpts: SearchOptions = { namespace, index_prefix };
         const must: unknown[] = [];
+        addNamespaceFilter(must, namespace);
         if (service) must.push({ term: { service } });
         if (level) must.push({ term: { level } });
         if (keyword) must.push({ match: { message: String(keyword) } });
         const query = must.length > 0 ? { bool: { must } } : { match_all: {} };
 
-        const records = await searchRecords(query, Number(limit));
+        const records = await searchRecords(query, Number(limit), searchOpts);
         const result = records.slice(-Number(limit)).map((l) => ({ ...l, message: redact(l.message ?? "") }));
-        return { success: true, data: { total_matched: result.length, logs: result }, durationMs: Date.now() - start };
+        return { success: true, data: { total_matched: result.length, logs: result, index_pattern: buildIndexPattern(searchOpts) }, durationMs: Date.now() - start };
       }
 
       case "aggregate_by_field": {
-        const field = String(args.field ?? "level");
+        const { field, namespace, index_prefix } = args as { field?: string; namespace?: string; index_prefix?: string };
+        const searchOpts: SearchOptions = { namespace, index_prefix };
+        const index = buildIndexPattern(searchOpts);
         const res: any = await osClient.search({
-          index: INDEX_PATTERN,
+          index,
           body: {
             size: 0,
+            query: namespace ? { bool: { must: [{ term: { namespace } }] } } : { match_all: {} },
             aggs: { by_field: { terms: { field: `${field}.keyword`, size: 20 } } },
           },
         } as any);
@@ -131,22 +172,30 @@ export async function executeElkTool(tool: string, args: Record<string, unknown>
           counts[b.key] = b.doc_count;
           total += b.doc_count;
         }
-        return { success: true, data: { field, counts, total }, durationMs: Date.now() - start };
+        return { success: true, data: { field, counts, total, index_pattern: index }, durationMs: Date.now() - start };
       }
 
       case "get_error_timeline": {
-        const records = await searchRecords({ terms: { "level.keyword": ["WARN", "ERROR"] } }, 200);
+        const { namespace, index_prefix } = args as { namespace?: string; index_prefix?: string };
+        const searchOpts: SearchOptions = { namespace, index_prefix };
+        const must: unknown[] = [{ terms: { "level.keyword": ["WARN", "ERROR"] } }];
+        addNamespaceFilter(must, namespace);
+        const records = await searchRecords({ bool: { must } }, 200, searchOpts);
         const timeline = records.map((l) => ({
           time: l["@timestamp"],
           level: l.level,
           message: redact(l.message ?? ""),
           rss_mb: l.rss_mb,
         }));
-        return { success: true, data: { timeline }, durationMs: Date.now() - start };
+        return { success: true, data: { timeline, index_pattern: buildIndexPattern(searchOpts) }, durationMs: Date.now() - start };
       }
 
       case "cluster_similar_errors": {
-        const problematic = await searchRecords({ terms: { "level.keyword": ["WARN", "ERROR"] } }, 500);
+        const { namespace, index_prefix } = args as { namespace?: string; index_prefix?: string };
+        const searchOpts: SearchOptions = { namespace, index_prefix };
+        const must: unknown[] = [{ terms: { "level.keyword": ["WARN", "ERROR"] } }];
+        addNamespaceFilter(must, namespace);
+        const problematic = await searchRecords({ bool: { must } }, 500, searchOpts);
         const clusters = new Map<string, { pattern: string; count: number; first: string; last: string; sample: LogRecord }>();
         for (const l of problematic) {
           const tmpl = templateOf(l.message ?? "");
@@ -168,7 +217,7 @@ export async function executeElkTool(tool: string, args: Record<string, unknown>
             last_seen: c.last,
             sample_log: redact(JSON.stringify(c.sample)),
           }));
-        return { success: true, data: { clusters: result, total_problematic_logs: problematic.length }, durationMs: Date.now() - start };
+        return { success: true, data: { clusters: result, total_problematic_logs: problematic.length, index_pattern: buildIndexPattern(searchOpts) }, durationMs: Date.now() - start };
       }
 
       default:
