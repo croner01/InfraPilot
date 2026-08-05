@@ -1,627 +1,1129 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
+import {
+  createSession,
+  downloadDrawioUrl,
+  exportDrawioDiagram,
+  fetchSessionEvents,
+  getPodDetail,
+  getSession,
+  listPods,
+  listSessions,
+  resetDemoScenario,
+  sendMessage,
+  terminateSession,
+  updateSessionTitle,
+  decideApproval,
+  wsUrl,
+  type PodInfo,
+  type PodEvent,
+} from "./lib/api.js";
+import { SessionDetailTabs } from "./components/SessionDetailTabs.js";
+import { KnowledgePage } from "./components/KnowledgePage.js";
+import { TopologyPage } from "./components/TopologyPage.js";
+import { SettingsPage } from "./components/SettingsPage.js";
+import { SkillsPage } from "./components/SkillsPage.js";
+import { DrawioImageViewer } from "./components/DrawioImageViewer.js";
+import type { AgentSession, TimelineEvent } from "./lib/types.js";
 import "./styles/app.css";
-import type { TimelineEvent, SessionSummary, ElkConfig, ElkTarget, HostRegistry, HostEntry } from "./lib/types";
 
-const API_BASE = "/api";
+type View = "sessions" | "knowledge" | "topology" | "settings" | "skills";
+type MainTab = "timeline" | "evidence" | "plan" | "remediation" | "audit";
 
-function generateId(): string {
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-    return crypto.randomUUID();
-  }
-  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
-    const r = (Math.random() * 16) | 0;
-    const v = c === "x" ? r : (r & 0x3) | 0x8;
-    return v.toString(16);
-  });
+const statusText: Record<string, string> = {
+  intake: "接收中",
+  planning: "分析规划",
+  executing: "执行中",
+  awaiting_approval: "等待审批",
+  reflecting: "反思中",
+  concluded: "已得出结论",
+  remediating: "修复中",
+  closed: "已关闭",
+};
+
+const statusClass: Record<string, string> = {
+  intake: "status--intake",
+  planning: "status--planning",
+  executing: "status--executing",
+  awaiting_approval: "status--warning",
+  reflecting: "status--planning",
+  concluded: "status--success",
+  remediating: "status--executing",
+  closed: "status--closed",
+};
+
+function classNames(...arr: (string | false | undefined)[]) {
+  return arr.filter(Boolean).join(" ");
 }
 
 function formatTime(iso: string) {
-  const d = new Date(iso);
-  return d.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" });
-}
-
-function statusText(status: string) {
-  const map: Record<string, string> = {
-    intake: "待输入",
-    planning: "分析中",
-    executing: "执行中",
-    awaiting_approval: "待审批",
-    reflecting: "反思中",
-    concluded: "已结论",
-    remediating: "修复中",
-    closed: "已终止",
-  };
-  return map[status] ?? status;
+  return new Date(iso).toLocaleString("zh-CN", { hour12: false });
 }
 
 export default function App() {
-  const [sessionId, setSessionId] = useState<string | null>(null);
-  const [sessions, setSessions] = useState<SessionSummary[]>([]);
+  const [sessions, setSessions] = useState<AgentSession[]>([]);
+  const [currentId, setCurrentId] = useState<string | null>(null);
   const [events, setEvents] = useState<TimelineEvent[]>([]);
   const [input, setInput] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<"context" | "elk" | "hosts">("context");
-  const [podState, setPodState] = useState<any>(null);
-  const [elkConfig, setElkConfig] = useState<ElkConfig>({ node: "", targets: [] });
-  const [hostRegistry, setHostRegistry] = useState<HostRegistry>({ hosts: [] });
   const [search, setSearch] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [connected, setConnected] = useState(false);
+  const [mainTab, setMainTab] = useState<MainTab>("timeline");
+  const [currentView, setCurrentView] = useState<View>("sessions");
+  const [toasts, setToasts] = useState<{ id: string; message: string; type: "error" | "success" }[]>([]);
   const wsRef = useRef<WebSocket | null>(null);
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const chatEndRef = useRef<HTMLDivElement | null>(null);
 
-  const filteredSessions = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return sessions;
-    return sessions.filter((s) => s.title.toLowerCase().includes(q) || s.id.toLowerCase().includes(q));
-  }, [sessions, search]);
+  const currentSession = sessions.find((s) => s.id === currentId);
 
-  async function refreshSessions() {
-    try {
-      const res = await fetch(`${API_BASE}/sessions`);
-      const list = (await res.json()) as SessionSummary[];
-      setSessions(list);
-    } catch {
-      // ignore
-    }
-  }
+  const notify = useCallback((message: string, type: "error" | "success" = "error") => {
+    const id = Math.random().toString(36).slice(2);
+    setToasts((prev) => [...prev, { id, message, type }]);
+    setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 4000);
+  }, []);
 
-  async function refreshConfig() {
-    try {
-      const [elkRes, hostsRes] = await Promise.all([fetch(`${API_BASE}/config/elk`), fetch(`${API_BASE}/config/hosts`)]);
-      setElkConfig((await elkRes.json()) as ElkConfig);
-      setHostRegistry((await hostsRes.json()) as HostRegistry);
-    } catch {
-      // ignore
-    }
-  }
+  const refreshSessions = useCallback(async () => {
+    const rows = await listSessions((err) => notify(err.message));
+    if (!rows) return;
+    const full = await Promise.all(
+      rows.map(async (r) => {
+        const s = await getSession(r.id);
+        return s || { ...r, plan: [], evidence: [], pendingToolCalls: [], executedToolCalls: [], iteration: 0, maxIterations: 12 };
+      })
+    );
+    setSessions(full as AgentSession[]);
+  }, [notify]);
 
+  // Load sessions on mount
   useEffect(() => {
     refreshSessions();
-    refreshConfig();
-    const t = setInterval(refreshSessions, 5000);
-    return () => clearInterval(t);
-  }, []);
+  }, [refreshSessions]);
 
+  // WebSocket connection
   useEffect(() => {
-    const t = setInterval(() => {
-      fetch(`${API_BASE}/demo/pod-state`)
-        .then((r) => r.json())
-        .then(setPodState)
-        .catch(() => {});
-    }, 2000);
-    return () => clearInterval(t);
-  }, []);
-
-  useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
-  }, [events]);
-
-  function connectWs(id: string) {
+    if (!currentId) return;
     if (wsRef.current) {
       wsRef.current.close();
     }
-    const proto = location.protocol === "https:" ? "wss" : "ws";
-    const ws = new WebSocket(`${proto}://${location.host}/ws?sessionId=${id}`);
-    ws.onmessage = (msg) => {
-      const ev: TimelineEvent = JSON.parse(msg.data);
-      setEvents((prev) => [...prev, ev]);
-      if (ev.type === "done" || ev.type === "approval_request" || ev.type === "status") {
-        refreshSessions();
+    setLoading(true);
+    const ws = new WebSocket(wsUrl(currentId));
+    wsRef.current = ws;
+
+    ws.onopen = () => {
+      setConnected(true);
+      setLoading(false);
+    };
+    ws.onmessage = (ev) => {
+      try {
+        const data = JSON.parse(ev.data) as TimelineEvent;
+        setEvents((prev) => [...prev, data]);
+        if (["status", "done", "error", "rca_conclusion", "approval_request"].includes(data.type)) {
+          refreshSessions();
+        }
+      } catch {
+        // ignore non-json
       }
     };
     ws.onclose = () => {
-      // 自动重连一次
-      setTimeout(() => connectWs(id), 1500);
+      setConnected(false);
     };
-    wsRef.current = ws;
-  }
+    ws.onerror = () => {
+      notify("WebSocket 连接异常");
+      setConnected(false);
+    };
 
-  async function startSession() {
-    setIsLoading(true);
-    try {
-      const res = await fetch(`${API_BASE}/sessions`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: "故障排查会话" }),
-      });
-      const session = (await res.json()) as SessionSummary;
-      setSessionId(session.id);
-      setEvents([]);
-      connectWs(session.id);
-      await refreshSessions();
-    } finally {
-      setIsLoading(false);
+    return () => {
+      ws.close();
+      wsRef.current = null;
+    };
+  }, [currentId, notify, refreshSessions]);
+
+  // Auto scroll chat
+  useEffect(() => {
+    if (mainTab === "timeline") {
+      chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }
-  }
+  }, [events, mainTab]);
 
-  async function selectSession(id: string) {
-    setSessionId(id);
+  const handleCreate = async () => {
+    const s = await createSession("新的故障排查会话", (err) => notify(err.message));
+    if (!s) return;
+    await refreshSessions();
     setEvents([]);
-    connectWs(id);
-    try {
-      const res = await fetch(`${API_BASE}/sessions/${id}`);
-      const session = await res.json();
-      // 将已有会话的关键状态作为伪事件展示,帮助用户快速理解上下文
-      const seed: TimelineEvent[] = [];
-      if (session.incidentSummary) {
-        seed.push({
-          id: generateId(),
-          sessionId: id,
-          type: "status",
-          timestamp: session.createdAt,
-          payload: { message: `事件摘要: ${session.incidentSummary}` },
-        });
-      }
-      if (session.executedToolCalls?.length > 0) {
-        for (const tc of session.executedToolCalls) {
-          seed.push({
-            id: generateId(),
-            sessionId: id,
-            type: "tool_call_result",
-            timestamp: tc.finishedAt,
-            payload: { skill: tc.skill, tool: tc.tool, result: tc.result },
-          });
-        }
-      }
-      if (session.rootCause?.summary) {
-        seed.push({
-          id: generateId(),
-          sessionId: id,
-          type: "assistant_message",
-          timestamp: session.updatedAt,
-          payload: { content: `【根因分析结论】${session.rootCause.summary}` },
-        });
-      }
-      setEvents(seed);
-    } catch {
-      // ignore
-    }
-  }
+    setCurrentId(s.id);
+    setMainTab("timeline");
+  };
 
-  async function terminateSession(id: string) {
-    if (!confirm("确定要终止该会话吗?")) return;
-    try {
-      await fetch(`${API_BASE}/sessions/${id}`, { method: "DELETE" });
-      if (sessionId === id) {
-        setSessionId(null);
-        setEvents([]);
-        wsRef.current?.close();
-        wsRef.current = null;
-      }
-      await refreshSessions();
-    } catch {
-      // ignore
-    }
-  }
-
-  async function sendMessage() {
-    if (!sessionId || !input.trim()) return;
-    const message = input.trim();
-    setInput("");
-    setEvents((prev) => [
-      ...prev,
-      { id: generateId(), sessionId, type: "user_message", timestamp: new Date().toISOString(), payload: { content: message } },
+  const handleSelect = async (id: string) => {
+    setCurrentId(id);
+    setMainTab("timeline");
+    const [s, events] = await Promise.all([
+      getSession(id),
+      fetchSessionEvents(id, (err) => notify(err.message)),
     ]);
-    setIsLoading(true);
-    try {
-      await fetch(`${API_BASE}/sessions/${sessionId}/messages`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message }),
-      });
-    } finally {
-      setIsLoading(false);
+    if (s) {
+      setSessions((prev) => prev.map((x) => (x.id === id ? s : x)));
     }
-  }
-
-  async function decideApproval(approvalId: string, approved: boolean) {
-    await fetch(`${API_BASE}/approvals/${approvalId}/decide`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ approved, approvedBy: "demo-user@company.com" }),
-    });
-  }
-
-  async function resetDemo() {
-    await fetch(`${API_BASE}/demo/restart-scenario`, { method: "POST" });
-  }
-
-  async function addElkTarget(target: ElkTarget) {
-    try {
-      const res = await fetch(`${API_BASE}/config/elk/targets`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(target),
-      });
-      if (res.ok) setElkConfig((prev) => ({ ...prev, targets: [...prev.targets, target] }));
-    } catch {
-      // ignore
+    if (events) {
+      setEvents(events);
     }
-  }
+  };
 
-  async function saveHost(host: HostEntry) {
-    try {
-      const res = await fetch(`${API_BASE}/config/hosts`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(host),
-      });
-      if (res.ok) {
-        const data = (await res.json()) as HostRegistry;
-        setHostRegistry(data);
-      }
-    } catch {
-      // ignore
-    }
-  }
+  const handleTerminate = async (id: string) => {
+    if (!confirm("确定要终止该会话吗？")) return;
+    await terminateSession(id, (err) => notify(err.message));
+    await refreshSessions();
+    if (currentId === id) setCurrentId(null);
+  };
 
-  async function deleteHost(name: string) {
-    try {
-      const res = await fetch(`${API_BASE}/config/hosts/${name}`, { method: "DELETE" });
-      if (res.ok) {
-        const data = (await res.json()) as HostRegistry;
-        setHostRegistry(data);
-      }
-    } catch {
-      // ignore
-    }
-  }
+  const handleTitleSave = async (id: string, title: string) => {
+    await updateSessionTitle(id, title, (err) => notify(err.message));
+    await refreshSessions();
+  };
+
+  const handleSend = async () => {
+    if (!currentId || !input.trim()) return;
+    setLoading(true);
+    await sendMessage(currentId, input.trim(), (err) => notify(err.message));
+    setInput("");
+    setLoading(false);
+  };
+
+  const handleApprove = async (approvalId: string, approved: boolean) => {
+    await decideApproval(approvalId, approved, "demo-user@company.com", (err) => notify(err.message));
+  };
+
+  const filteredSessions = sessions.filter((s) =>
+    s.title.toLowerCase().includes(search.toLowerCase()) ||
+    s.status.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const activeSessions = filteredSessions.filter((s) => s.status !== "closed");
+  const closedSessions = filteredSessions.filter((s) => s.status === "closed");
 
   return (
     <div className="app">
-      <header className="topbar">
-        <div className="brand">
-          <span className="logo" />
-          <span>InfraPilot Agent</span>
-        </div>
-        <div className="topbar-actions">
-          <button className="btn primary" onClick={startSession} disabled={isLoading}>
-            {isLoading ? "创建中..." : "+ 新建排查会话"}
-          </button>
-          <button className="btn ghost" onClick={resetDemo}>重置演示场景</button>
-        </div>
-      </header>
+      <TopBar
+        connected={connected}
+        onNewSession={() => {
+          setCurrentView("sessions");
+          handleCreate();
+        }}
+      />
+      <div className="app__body">
+        <Sidebar
+          search={search}
+          onSearch={setSearch}
+          activeSessions={activeSessions}
+          closedSessions={closedSessions}
+          currentId={currentId}
+          currentView={currentView}
+          onViewChange={setCurrentView}
+          onSelect={handleSelect}
+          onTerminate={handleTerminate}
+          onTitleSave={handleTitleSave}
+        />
+        <main className="main">
+          {currentView === "sessions" && (
+            currentSession ? (
+              <>
+                <SessionHeader session={currentSession} onTitleSave={handleTitleSave} onTerminate={handleTerminate} />
+                <div className="main__tabs">
+                  {[
+                    { key: "timeline", label: "时间线" },
+                    { key: "evidence", label: "证据链" },
+                    { key: "plan", label: "诊断计划" },
+                    { key: "remediation", label: "修复方案" },
+                    { key: "audit", label: "审计日志" },
+                  ].map((t) => (
+                    <button
+                      key={t.key}
+                      className={classNames("main__tab", mainTab === t.key && "main__tab--active")}
+                      onClick={() => setMainTab(t.key as MainTab)}
+                    >
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="main__content">
+                  {mainTab === "timeline" ? (
+                    <ChatArea
+                      events={events}
+                      loading={loading && events.length === 0}
+                      onApprove={handleApprove}
+                      chatEndRef={chatEndRef}
+                    />
+                  ) : (
+                    <SessionDetailTabs session={currentSession} />
+                  )}
+                </div>
+                {mainTab === "timeline" && (
+                  <div className="composer">
+                    <input
+                      className="composer__input"
+                      placeholder="描述故障现象或输入指令，例如：order-api Pod 反复重启..."
+                      value={input}
+                      onChange={(e) => setInput(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && handleSend()}
+                      disabled={loading}
+                    />
+                    <button className="composer__send" onClick={handleSend} disabled={!input.trim() || loading}>
+                      发送
+                    </button>
+                  </div>
+                )}
+              </>
+            ) : (
+              <EmptyWorkspace onNewSession={handleCreate} />
+            )
+          )}
+          {currentView === "knowledge" && <KnowledgePage notify={notify} />}
+          {currentView === "topology" && <TopologyPage />}
+          {currentView === "settings" && <SettingsPage notify={notify} />}
+          {currentView === "skills" && <SkillsPage notify={notify} />}
+        </main>
+        {currentView === "sessions" && <ContextPanel />}
+      </div>
+      <div className="toast-stack">
+        {toasts.map((t) => (
+          <div key={t.id} className={`toast toast--${t.type}`}>
+            {t.message}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
-      <div className="workspace">
-        <aside className="sidebar">
-          <div className="sidebar-section">
-            <div className="section-title">会话历史</div>
+function TopBar({ connected, onNewSession }: { connected: boolean; onNewSession: () => void }) {
+  return (
+    <header className="topbar">
+      <div className="topbar__brand">
+        <div className="topbar__logo">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </div>
+        <span className="topbar__title">InfraPilot</span>
+        <span className="topbar__subtitle">AI SRE 智能运维助手</span>
+      </div>
+      <div className="topbar__actions">
+        <div className={classNames("connection-pill", connected ? "connection-pill--online" : "connection-pill--offline")}>
+          <span className="connection-pill__dot" />
+          {connected ? "实时连接" : "未连接"}
+        </div>
+        <button className="topbar__new-btn" onClick={onNewSession}>
+          + 新建会话
+        </button>
+      </div>
+    </header>
+  );
+}
+
+function Sidebar({
+  search,
+  onSearch,
+  activeSessions,
+  closedSessions,
+  currentId,
+  currentView,
+  onViewChange,
+  onSelect,
+  onTerminate,
+  onTitleSave,
+}: {
+  search: string;
+  onSearch: (v: string) => void;
+  activeSessions: AgentSession[];
+  closedSessions: AgentSession[];
+  currentId: string | null;
+  currentView: View;
+  onViewChange: (v: View) => void;
+  onSelect: (id: string) => void;
+  onTerminate: (id: string) => void;
+  onTitleSave: (id: string, title: string) => void;
+}) {
+  const navItems: { key: View; label: string; icon: string }[] = [
+    { key: "sessions", label: "会话中心", icon: "💬" },
+    { key: "knowledge", label: "知识库", icon: "📚" },
+    { key: "topology", label: "拓扑", icon: "🌐" },
+    { key: "skills", label: "技能", icon: "🧩" },
+    { key: "settings", label: "设置", icon: "⚙️" },
+  ];
+
+  return (
+    <aside className="sidebar">
+      <nav className="sidebar__nav">
+        <div className="sidebar__group-title">功能导航</div>
+        <ul className="sidebar__nav-list">
+          {navItems.map((item) => (
+            <li key={item.key}>
+              <button
+                className={classNames("sidebar__nav-item", currentView === item.key && "active")}
+                onClick={() => onViewChange(item.key)}
+              >
+                <span className="sidebar__nav-icon">{item.icon}</span>
+                {item.label}
+              </button>
+            </li>
+          ))}
+        </ul>
+      </nav>
+
+      {currentView === "sessions" && (
+        <>
+          <div className="sidebar__search">
+            <svg className="sidebar__search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="11" cy="11" r="8" />
+              <path d="M21 21l-4.35-4.35" />
+            </svg>
             <input
-              className="search-input"
+              type="text"
               placeholder="搜索会话..."
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => onSearch(e.target.value)}
             />
           </div>
-          <div className="session-list">
-            {filteredSessions.map((s) => (
-              <div
-                key={s.id}
-                className={`session-card ${s.id === sessionId ? "active" : ""} status-${s.status}`}
-                onClick={() => selectSession(s.id)}
-              >
-                <div className="session-title">{s.title}</div>
-                <div className="session-meta">
-                  <span className="status-pill">{statusText(s.status)}</span>
-                  <span className="time">{formatTime(s.updated_at)}</span>
-                </div>
-                {s.id === sessionId && (
-                  <button
-                    className="session-terminate"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      terminateSession(s.id);
-                    }}
-                    title="终止会话"
-                  >
-                    ✕
-                  </button>
-                )}
-              </div>
-            ))}
-            {filteredSessions.length === 0 && <div className="empty-hint">暂无会话</div>}
-          </div>
-        </aside>
-
-        <main className="timeline-panel">
-          {!sessionId && (
-            <div className="empty-state">
-              <div className="empty-illustration">
-                <div className="orbit" />
-                <div className="planet" />
-              </div>
-              <h2>开始一次故障排查</h2>
-              <p>点击右上角「新建排查会话」,或从历史会话中选择继续。</p>
-              <div className="hint-cards">
-                <div className="hint-card">"生产环境 order-api 一直重启"</div>
-                <div className="hint-card">"帮我查一下 MySQL 磁盘为什么满了"</div>
-                <div className="hint-card">"ELK 最近 ERROR 日志有什么异常"</div>
-              </div>
-            </div>
-          )}
-          {sessionId && (
-            <>
-              <div className="timeline" ref={scrollRef}>
-                {events.map((ev) => (
-                  <EventCard key={ev.id} event={ev} onDecide={decideApproval} />
-                ))}
-                {isLoading && events.length > 0 && events[events.length - 1].type === "user_message" && (
-                  <div className="typing-indicator">
-                    <span />
-                    <span />
-                    <span />
-                  </div>
-                )}
-              </div>
-              <div className="composer">
-                <input
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && sendMessage()}
-                  placeholder="描述你遇到的故障现象..."
-                  disabled={!sessionId}
+          <div className="sidebar__content">
+            <div className="sidebar__section">
+              <div className="sidebar__section-title">进行中 ({activeSessions.length})</div>
+              {activeSessions.map((s) => (
+                <SessionItem
+                  key={s.id}
+                  session={s}
+                  active={s.id === currentId}
+                  onSelect={() => onSelect(s.id)}
+                  onTerminate={() => onTerminate(s.id)}
+                  onTitleSave={(title) => onTitleSave(s.id, title)}
                 />
-                <button className="btn primary" onClick={sendMessage} disabled={!input.trim()}>
-                  发送
-                </button>
-              </div>
-            </>
-          )}
-        </main>
-
-        <aside className="context-panel">
-          <div className="tabs">
-            <button className={activeTab === "context" ? "active" : ""} onClick={() => setActiveTab("context")}>
-              上下文
-            </button>
-            <button className={activeTab === "elk" ? "active" : ""} onClick={() => setActiveTab("elk")}>
-              ELK 配置
-            </button>
-            <button className={activeTab === "hosts" ? "active" : ""} onClick={() => setActiveTab("hosts")}>
-              主机配置
-            </button>
-          </div>
-
-          {activeTab === "context" && (
-            <div className="panel-content">
-              {podState ? (
-                <div className="pod-card">
-                  <div className="pod-header">
-                    <span className={`status-dot ${podState.status === "Running" ? "ok" : podState.status === "CrashLoopBackOff" ? "bad" : "warn"}`} />
-                    <strong>{podState.podName}</strong>
-                  </div>
-                  <div className="pod-row">namespace: {podState.namespace}</div>
-                  <div className="pod-row">status: <b>{podState.status}</b></div>
-                  <div className="pod-row">restarts: {podState.restartCount}</div>
-                  <div className="pod-row">memory limit: {podState.resources?.limitsMemoryMb}Mi</div>
-                  <div className="pod-row">当前RSS: {podState.currentRssMb}Mi</div>
-                  {podState.lastState && (
-                    <div className="pod-row">
-                      last state:{" "}
-                      <span className={podState.lastState.reason === "OOMKilled" ? "text-danger" : ""}>
-                        {podState.lastState.reason} (exit {podState.lastState.exitCode})
-                      </span>
-                    </div>
-                  )}
-                  <div className="pod-events">
-                    {podState.events?.slice(-6).reverse().map((e: any, i: number) => (
-                      <div key={i} className={`pod-event ${e.type === "Warning" ? "warn" : ""}`}>
-                        <span className="ts">{new Date(e.time).toLocaleTimeString()}</span> {e.reason}: {e.message}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : (
-                <div className="empty-hint">加载中...</div>
-              )}
+              ))}
             </div>
-          )}
-
-          {activeTab === "elk" && (
-            <ElkConfigPanel config={elkConfig} onAdd={addElkTarget} />
-          )}
-
-          {activeTab === "hosts" && (
-            <HostsConfigPanel registry={hostRegistry} onSave={saveHost} onDelete={deleteHost} />
-          )}
-        </aside>
-      </div>
-    </div>
-  );
-}
-
-function EventCard({ event, onDecide }: { event: TimelineEvent; onDecide: (id: string, approved: boolean) => void }) {
-  const { type, payload } = event;
-
-  if (type === "user_message") {
-    return (
-      <div className="message-row user">
-        <div className="msg user">{payload.content}</div>
-      </div>
-    );
-  }
-  if (type === "assistant_message") {
-    const isRca = payload.content?.includes("根因") || payload.content?.includes("置信度");
-    return (
-      <div className="message-row assistant">
-        <div className={`msg assistant ${isRca ? "rca" : ""}`}>{payload.content}</div>
-      </div>
-    );
-  }
-  if (type === "status") {
-    return <div className="event status">⏳ {payload.message}</div>;
-  }
-  if (type === "tool_call_start") {
-    return (
-      <div className="event tool-call">
-        <span className={`badge risk-${payload.risk.level}`}>{payload.risk.level}</span>
-        <code>{payload.skill}.{payload.tool}</code>
-        <span className="args">{JSON.stringify(payload.args)}</span>
-      </div>
-    );
-  }
-  if (type === "tool_call_result") {
-    const ok = payload.result?.success;
-    return (
-      <div className={`event tool-result ${ok ? "ok" : "fail"}`}>
-        {ok ? "✔" : "✘"} {payload.skill}.{payload.tool} 完成 ({payload.result?.durationMs ?? 0}ms)
-      </div>
-    );
-  }
-  if (type === "approval_request") {
-    return (
-      <div className="approval-card">
-        <div className="approval-header">
-          ⚠️ 需要您批准以下操作 <span className={`badge risk-${payload.risk.level}`}>{payload.risk.level}</span>
-        </div>
-        <div className="approval-body">
-          <div>
-            操作: <code>{payload.skill}.{payload.tool}</code>
+            <div className="sidebar__section">
+              <div className="sidebar__section-title">历史会话 ({closedSessions.length})</div>
+              {closedSessions.map((s) => (
+                <SessionItem
+                  key={s.id}
+                  session={s}
+                  active={s.id === currentId}
+                  onSelect={() => onSelect(s.id)}
+                  onTerminate={() => onTerminate(s.id)}
+                  onTitleSave={(title) => onTitleSave(s.id, title)}
+                />
+              ))}
+            </div>
           </div>
-          {payload.diffPreview && <pre className="diff">{payload.diffPreview}</pre>}
-          {payload.risk.blastRadius && <div className="blast">影响范围: {payload.risk.blastRadius}</div>}
-        </div>
-        <div className="approval-actions">
-          <button className="btn approve" onClick={() => onDecide(payload.approvalId, true)}>
-            ✅ 批准执行
-          </button>
-          <button className="btn reject" onClick={() => onDecide(payload.approvalId, false)}>
-            ❌ 拒绝
-          </button>
-        </div>
-      </div>
-    );
-  }
-  if (type === "approval_decision") {
-    return (
-      <div className={`event decision ${payload.approved ? "approved" : "rejected"}`}>
-        {payload.approved ? "✅ 已批准" : "❌ 已拒绝"} by {payload.approvedBy}
-      </div>
-    );
-  }
-  if (type === "rca_conclusion") {
-    return null;
-  }
-  if (type === "knowledge_case_added") {
-    return <div className="event knowledge">📚 已沉淀知识案例: {payload.title}</div>;
-  }
-  if (type === "checkpoint_saved") {
-    return null;
-  }
-  return null;
-}
-
-function ElkConfigPanel({ config, onAdd }: { config: ElkConfig; onAdd: (t: ElkTarget) => void }) {
-  const [namespace, setNamespace] = useState("");
-  const [podPrefix, setPodPrefix] = useState("");
-  const [indexPrefix, setIndexPrefix] = useState("");
-
-  function submit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!namespace || !podPrefix || !indexPrefix) return;
-    onAdd({ namespace, podNamePrefix: podPrefix, indexPrefix });
-    setNamespace("");
-    setPodPrefix("");
-    setIndexPrefix("");
-  }
-
-  return (
-    <div className="panel-content">
-      <div className="config-card">
-        <div className="config-row">
-          <span className="config-label">OpenSearch Node</span>
-          <span className="config-value">{config.node || "未配置"}</span>
-        </div>
-      </div>
-      <div className="section-title">采集目标</div>
-      {config.targets.map((t, i) => (
-        <div key={i} className="config-card small">
-          <div className="config-row"><span className="config-label">namespace</span><span>{t.namespace}</span></div>
-          <div className="config-row"><span className="config-label">pod 前缀</span><span>{t.podNamePrefix}</span></div>
-          <div className="config-row"><span className="config-label">索引前缀</span><span>{t.indexPrefix}</span></div>
-        </div>
-      ))}
-      <form className="config-form" onSubmit={submit}>
-        <input placeholder="namespace" value={namespace} onChange={(e) => setNamespace(e.target.value)} />
-        <input placeholder="pod 前缀" value={podPrefix} onChange={(e) => setPodPrefix(e.target.value)} />
-        <input placeholder="索引前缀" value={indexPrefix} onChange={(e) => setIndexPrefix(e.target.value)} />
-        <button className="btn primary" type="submit">添加目标</button>
-      </form>
-    </div>
+        </>
+      )}
+    </aside>
   );
 }
 
-function HostsConfigPanel({
-  registry,
-  onSave,
-  onDelete,
+function SessionItem({
+  session,
+  active,
+  onSelect,
+  onTerminate,
+  onTitleSave,
 }: {
-  registry: HostRegistry;
-  onSave: (h: HostEntry) => void;
-  onDelete: (name: string) => void;
+  session: AgentSession;
+  active: boolean;
+  onSelect: () => void;
+  onTerminate: () => void;
+  onTitleSave: (title: string) => void;
 }) {
-  const [name, setName] = useState("");
-  const [hostname, setHostname] = useState("");
-  const [port, setPort] = useState("22");
-  const [username, setUsername] = useState("");
-  const [authType, setAuthType] = useState<HostEntry["auth"]["type"]>("privateKey");
-  const [secret, setSecret] = useState("");
-  const [showForm, setShowForm] = useState(false);
-
-  function submit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!name || !hostname || !username) return;
-    const auth: HostEntry["auth"] =
-      authType === "privateKey"
-        ? { type: "privateKey", privateKeyEnv: secret || undefined }
-        : authType === "password"
-        ? { type: "password", passwordEnv: secret || undefined }
-        : { type: "agent" };
-    onSave({ name, hostname, port: Number(port) || 22, username, auth });
-    setName("");
-    setHostname("");
-    setPort("22");
-    setUsername("");
-    setSecret("");
-    setShowForm(false);
-  }
+  const [editing, setEditing] = useState(false);
+  const [title, setTitle] = useState(session.title);
 
   return (
-    <div className="panel-content">
-      <div className="section-title">已注册主机</div>
-      {registry.hosts.map((h) => (
-        <div key={h.name} className="config-card small">
-          <div className="config-row">
-            <span className="config-value">{h.name}</span>
-            <button className="btn ghost tiny" onClick={() => onDelete(h.name)}>删除</button>
+    <div className={classNames("session-item", active && "session-item--active")} onClick={onSelect}>
+      <div className="session-item__row">
+        {editing ? (
+          <input
+            className="session-item__input"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            onBlur={() => {
+              setEditing(false);
+              onTitleSave(title);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                setEditing(false);
+                onTitleSave(title);
+              }
+            }}
+            autoFocus
+            onClick={(e) => e.stopPropagation()}
+          />
+        ) : (
+          <div className="session-item__title" onDoubleClick={() => setEditing(true)} title="双击编辑标题">
+            {session.title}
           </div>
-          <div className="config-row"><span className="config-label">地址</span><span>{h.hostname}:{h.port ?? 22}</span></div>
-          <div className="config-row"><span className="config-label">用户</span><span>{h.username}</span></div>
-          <div className="config-row"><span className="config-label">认证</span><span>{h.auth.type}</span></div>
+        )}
+        <button
+          className="session-item__close"
+          title="终止会话"
+          onClick={(e) => {
+            e.stopPropagation();
+            onTerminate();
+          }}
+        >
+          ✕
+        </button>
+      </div>
+      <div className="session-item__meta">
+        <span className={classNames("status-badge", statusClass[session.status])}>{statusText[session.status] ?? session.status}</span>
+        <span className="session-item__time">{formatTime(session.updatedAt)}</span>
+      </div>
+    </div>
+  );
+}
+
+function SessionHeader({
+  session,
+  onTitleSave,
+  onTerminate,
+}: {
+  session: AgentSession;
+  onTitleSave: (id: string, title: string) => void;
+  onTerminate: (id: string) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [title, setTitle] = useState(session.title);
+
+  return (
+    <div className="session-header">
+      <div className="session-header__info">
+        {editing ? (
+          <input
+            className="session-header__title-input"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            onBlur={() => {
+              setEditing(false);
+              onTitleSave(session.id, title);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                setEditing(false);
+                onTitleSave(session.id, title);
+              }
+            }}
+            autoFocus
+          />
+        ) : (
+          <h1 className="session-header__title" onClick={() => setEditing(true)} title="点击编辑">
+            {session.title}
+          </h1>
+        )}
+        <p className="session-header__desc">
+          {session.incidentSummary || "暂无故障摘要，请在下方输入现象开始诊断。"}
+        </p>
+      </div>
+      <div className="session-header__stats">
+        <div className="stat-card">
+          <div className="stat-card__value">{session.iteration}</div>
+          <div className="stat-card__label">迭代轮次</div>
         </div>
+        <div className="stat-card">
+          <div className="stat-card__value">{session.evidence.length}</div>
+          <div className="stat-card__label">证据</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-card__value">{session.executedToolCalls.length}</div>
+          <div className="stat-card__label">已执行工具</div>
+        </div>
+      </div>
+      <div className="session-header__actions">
+        <button className="btn btn--danger" onClick={() => onTerminate(session.id)}>
+          终止会话
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ChatArea({
+  events,
+  loading,
+  onApprove,
+  chatEndRef,
+}: {
+  events: TimelineEvent[];
+  loading: boolean;
+  onApprove: (id: string, approved: boolean) => void;
+  chatEndRef: React.RefObject<HTMLDivElement | null>;
+}) {
+  return (
+    <div className="chat-area">
+      {events.length === 0 && !loading && (
+        <div className="chat-empty">
+          <div className="chat-empty__orb" />
+          <div className="chat-empty__title">等待开始</div>
+          <div className="chat-empty__hint">在下方输入故障现象，AI Agent 将自动诊断并收集证据。</div>
+        </div>
+      )}
+      {events.map((ev) => (
+        <EventCard key={ev.id} event={ev} onApprove={onApprove} />
       ))}
-      {registry.hosts.length === 0 && <div className="empty-hint">暂无远程主机</div>}
-      {!showForm ? (
-        <button className="btn ghost" onClick={() => setShowForm(true)}>+ 添加主机</button>
-      ) : (
-        <form className="config-form" onSubmit={submit}>
-          <input placeholder="别名 (如 node-1)" value={name} onChange={(e) => setName(e.target.value)} />
-          <input placeholder="IP 或域名" value={hostname} onChange={(e) => setHostname(e.target.value)} />
-          <input placeholder="端口" value={port} onChange={(e) => setPort(e.target.value)} />
-          <input placeholder="用户名" value={username} onChange={(e) => setUsername(e.target.value)} />
-          <select value={authType} onChange={(e) => setAuthType(e.target.value as HostEntry["auth"]["type"])}>
-            <option value="privateKey">私钥 (环境变量名)</option>
-            <option value="password">密码 (环境变量名)</option>
-            <option value="agent">SSH Agent</option>
-          </select>
-          {authType !== "agent" && (
-            <input placeholder="凭据环境变量名" value={secret} onChange={(e) => setSecret(e.target.value)} />
-          )}
-          <div className="form-actions">
-            <button className="btn ghost" type="button" onClick={() => setShowForm(false)}>取消</button>
-            <button className="btn primary" type="submit">保存</button>
+      {loading && (
+        <div className="typing">
+          <div className="typing__dots">
+            <span />
+            <span />
+            <span />
           </div>
-        </form>
+          <span className="typing__text">Agent 正在思考...</span>
+        </div>
+      )}
+      <div ref={chatEndRef} />
+    </div>
+  );
+}
+
+function DrawioResultCard({ result, args }: { result: any; args?: Record<string, unknown> }) {
+  const [preview, setPreview] = useState<string | null>(null);
+
+  if (!result?.success) {
+    return (
+      <div className="timeline-item__text timeline-item__text--error">
+        生成失败: {result?.error || "未知错误"}
+      </div>
+    );
+  }
+
+  const data = result.data || {};
+  const outputPath = data.output_path as string | undefined;
+  const format = data.format as string | undefined;
+  const nodeCount = data.node_count as number | undefined;
+  const edgeCount = data.edge_count as number | undefined;
+  const isExport = !!format && outputPath?.endsWith(`.${format}`);
+  const title = (args?.title as string) || (isExport ? "流程图导出" : "流程图生成");
+
+  useEffect(() => {
+    if (!outputPath) return;
+    if (isExport && (format === "png" || format === "svg")) {
+      setPreview(downloadDrawioUrl(outputPath));
+      return;
+    }
+    if (outputPath.endsWith(".drawio")) {
+      exportDrawioDiagram(outputPath, "png").then((res) => {
+        if (res) setPreview(`data:image/png;base64,${res.data}`);
+      });
+    }
+  }, [outputPath, format, isExport]);
+
+  return (
+    <div className="drawio-result-card">
+      <div className="drawio-result-card__title">{title}</div>
+      {(nodeCount !== undefined || edgeCount !== undefined) && (
+        <div className="drawio-result-card__meta">
+          {nodeCount !== undefined && <span>节点: {nodeCount}</span>}
+          {edgeCount !== undefined && <span>边: {edgeCount}</span>}
+        </div>
+      )}
+      {outputPath && (
+        <div className="drawio-result-card__actions">
+          {preview && (
+            <DrawioImageViewer
+              src={preview}
+              alt={title}
+              className="drawio-result-card__preview"
+              caption="点击预览可全屏缩放"
+            />
+          )}
+          <a
+            className="btn btn--sm btn--secondary"
+            href={downloadDrawioUrl(outputPath)}
+            download={outputPath.split("/").pop()}
+          >
+            下载 {isExport ? `.${format}` : ".drawio"}
+          </a>
+        </div>
       )}
     </div>
   );
+}
+
+function EventCard({ event, onApprove }: { event: TimelineEvent; onApprove: (id: string, approved: boolean) => void }) {
+  const p = event.payload || {};
+
+  switch (event.type) {
+    case "user_message":
+      return (
+        <div className="message message--user">
+          <div className="message__bubble">{p.message || p.content || "用户消息"}</div>
+          <div className="message__time">{formatTime(event.timestamp)}</div>
+        </div>
+      );
+    case "assistant_message":
+      return (
+        <div className="message message--assistant">
+          <div className="message__avatar">AI</div>
+          <div>
+            <div className="message__bubble" dangerouslySetInnerHTML={{ __html: formatMarkdown(p.content || "") }} />
+            <div className="message__time">{formatTime(event.timestamp)}</div>
+          </div>
+        </div>
+      );
+    case "status":
+      return (
+        <div className="timeline-item timeline-item--status">
+          <div className="timeline-item__icon">ℹ</div>
+          <div className="timeline-item__body">
+            <div className="timeline-item__title">状态更新</div>
+            <div className="timeline-item__text">{p.message || p.status}</div>
+          </div>
+          <div className="timeline-item__time">{formatTime(event.timestamp)}</div>
+        </div>
+      );
+    case "tool_call_start":
+      return (
+        <div className="timeline-item timeline-item--tool">
+          <div className="timeline-item__icon">🔧</div>
+          <div className="timeline-item__body">
+            <div className="timeline-item__title">
+              {p.skill}.{p.tool}()
+            </div>
+            <div className="timeline-item__text">
+              风险等级: <span className={`risk-badge risk-badge--${p.risk?.level}`}>{p.risk?.level}</span>
+            </div>
+            {p.args && Object.keys(p.args).length > 0 && (
+              <pre className="timeline-item__code">{JSON.stringify(p.args, null, 2)}</pre>
+            )}
+          </div>
+          <div className="timeline-item__time">{formatTime(event.timestamp)}</div>
+        </div>
+      );
+    case "tool_call_result":
+      return (
+        <div className="timeline-item timeline-item--result">
+          <div className="timeline-item__icon">{p.result?.success ? "✅" : "❌"}</div>
+          <div className="timeline-item__body">
+            <div className="timeline-item__title">工具执行结果</div>
+            {p.skill === "drawio" ? (
+              <DrawioResultCard result={p.result} args={p.args} />
+            ) : (
+              <pre className="timeline-item__code timeline-item__code--compact">
+                {JSON.stringify(p.result, null, 2)}
+              </pre>
+            )}
+          </div>
+          <div className="timeline-item__time">{formatTime(event.timestamp)}</div>
+        </div>
+      );
+    case "approval_request":
+      return (
+        <ApprovalCard
+          skill={p.skill}
+          tool={p.tool}
+          args={p.args}
+          risk={p.risk}
+          diffPreview={p.diffPreview}
+          onApprove={() => onApprove(p.approvalId, true)}
+          onReject={() => onApprove(p.approvalId, false)}
+        />
+      );
+    case "approval_decision":
+      return (
+        <div className="timeline-item timeline-item--status">
+          <div className="timeline-item__icon">{p.decision === "approved" ? "✅" : "❌"}</div>
+          <div className="timeline-item__body">
+            <div className="timeline-item__title">审批决策</div>
+            <div className="timeline-item__text">
+              {p.decision === "approved" ? "已批准" : "已拒绝"} {p.approvedBy ? `(${p.approvedBy})` : ""}
+            </div>
+          </div>
+          <div className="timeline-item__time">{formatTime(event.timestamp)}</div>
+        </div>
+      );
+    case "evidence_added":
+      return (
+        <div className="timeline-item timeline-item--evidence">
+          <div className="timeline-item__icon">🔍</div>
+          <div className="timeline-item__body">
+            <div className="timeline-item__title">新增证据</div>
+            <div className="timeline-item__text">{p.summary}</div>
+            {p.content && (
+              <pre className="timeline-item__code timeline-item__code--compact">
+                {typeof p.content === "string" ? p.content : JSON.stringify(p.content, null, 2)}
+              </pre>
+            )}
+          </div>
+          <div className="timeline-item__time">{formatTime(event.timestamp)}</div>
+        </div>
+      );
+    case "plan_update":
+      return (
+        <div className="timeline-item timeline-item--plan">
+          <div className="timeline-item__icon">📋</div>
+          <div className="timeline-item__body">
+            <div className="timeline-item__title">诊断计划更新</div>
+            <ol className="timeline-item__list">
+              {(Array.isArray(p.plan) ? p.plan : []).map((step: string, i: number) => (
+                <li key={i}>{step}</li>
+              ))}
+            </ol>
+          </div>
+          <div className="timeline-item__time">{formatTime(event.timestamp)}</div>
+        </div>
+      );
+    case "remediation_plan":
+      return (
+        <div className="timeline-item timeline-item--remediation">
+          <div className="timeline-item__icon">🛠️</div>
+          <div className="timeline-item__body">
+            <div className="timeline-item__title">修复方案</div>
+            <div className="timeline-item__text">{p.summary}</div>
+            {p.steps && (
+              <ol className="timeline-item__list">
+                {p.steps.map((step: any, i: number) => (
+                  <li key={i}>{step.description}</li>
+                ))}
+              </ol>
+            )}
+          </div>
+          <div className="timeline-item__time">{formatTime(event.timestamp)}</div>
+        </div>
+      );
+    case "rca_conclusion":
+      return (
+        <div className="timeline-item timeline-item--rca">
+          <div className="timeline-item__icon">🎯</div>
+          <div className="timeline-item__body">
+            <div className="timeline-item__title">根因分析结论</div>
+            <div className="timeline-item__text timeline-item__text--highlight">{p.content}</div>
+          </div>
+          <div className="timeline-item__time">{formatTime(event.timestamp)}</div>
+        </div>
+      );
+    case "knowledge_case_added":
+      return (
+        <div className="timeline-item timeline-item--knowledge">
+          <div className="timeline-item__icon">📚</div>
+          <div className="timeline-item__body">
+            <div className="timeline-item__title">知识库沉淀</div>
+            <div className="timeline-item__text">{p.title || "已自动保存相似案例"}</div>
+          </div>
+          <div className="timeline-item__time">{formatTime(event.timestamp)}</div>
+        </div>
+      );
+    case "error":
+      return (
+        <div className="timeline-item timeline-item--error">
+          <div className="timeline-item__icon">⚠</div>
+          <div className="timeline-item__body">
+            <div className="timeline-item__title">运行错误</div>
+            <div className="timeline-item__text">{p.message || JSON.stringify(p)}</div>
+          </div>
+          <div className="timeline-item__time">{formatTime(event.timestamp)}</div>
+        </div>
+      );
+    case "done":
+      return (
+        <div className="timeline-item timeline-item--done">
+          <div className="timeline-item__icon">🏁</div>
+          <div className="timeline-item__body">
+            <div className="timeline-item__title">会话结束</div>
+            <div className="timeline-item__text">诊断流程已完成</div>
+          </div>
+          <div className="timeline-item__time">{formatTime(event.timestamp)}</div>
+        </div>
+      );
+    case "checkpoint_saved":
+    case "runner_resumed":
+      return null; // internal events, skip visual noise
+    default:
+      return (
+        <div className="timeline-item timeline-item--muted">
+          <div className="timeline-item__icon">•</div>
+          <div className="timeline-item__body">
+            <div className="timeline-item__title">{event.type}</div>
+            <pre className="timeline-item__code timeline-item__code--compact">{JSON.stringify(p, null, 2)}</pre>
+          </div>
+          <div className="timeline-item__time">{formatTime(event.timestamp)}</div>
+        </div>
+      );
+  }
+}
+
+function ApprovalCard({
+  skill,
+  tool,
+  args,
+  risk,
+  diffPreview,
+  onApprove,
+  onReject,
+}: {
+  skill: string;
+  tool: string;
+  args: Record<string, unknown>;
+  risk: any;
+  diffPreview?: string;
+  onApprove: () => void;
+  onReject: () => void;
+}) {
+  return (
+    <div className="approval-card">
+      <div className="approval-card__header">
+        <span className="approval-card__icon">🔒</span>
+        <span className="approval-card__title">高危操作待审批</span>
+        <span className={`risk-badge risk-badge--${risk?.level}`}>{risk?.level}</span>
+      </div>
+      <div className="approval-card__body">
+        <div className="approval-card__tool">
+          {skill}.{tool}()
+        </div>
+        <div className="approval-card__reason">{risk?.reason}</div>
+        {diffPreview && (
+          <div className="approval-card__diff">
+            <div className="approval-card__diff-title">变更预览</div>
+            <pre>{diffPreview}</pre>
+          </div>
+        )}
+        {args && Object.keys(args).length > 0 && (
+          <pre className="approval-card__args">{JSON.stringify(args, null, 2)}</pre>
+        )}
+      </div>
+      <div className="approval-card__actions">
+        <button className="btn btn--danger" onClick={onReject}>
+          拒绝
+        </button>
+        <button className="btn btn--primary" onClick={onApprove}>
+          批准执行
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ContextPanel() {
+  return (
+    <aside className="context-panel">
+      <div className="context-panel__header">Pod 上下文</div>
+      <div className="context-panel__body">
+        <PodContext />
+      </div>
+    </aside>
+  );
+}
+
+function PodContext() {
+  const [pods, setPods] = useState<PodInfo[]>([]);
+  const [selected, setSelected] = useState<PodInfo | null>(null);
+  const [events, setEvents] = useState<PodEvent[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const isOrderApiDemo = selected?.name.startsWith("order-api") && selected?.namespace === "order-service";
+
+  const loadPods = async () => {
+    setLoading(true);
+    setError(null);
+    const abnormal = await listPods(undefined, true);
+    let target = abnormal?.pods ?? [];
+    if (target.length === 0) {
+      const all = await listPods();
+      target = all?.pods ?? [];
+    }
+    setPods(target);
+    if (target.length > 0 && !selected) {
+      await selectPod(target[0]);
+    }
+    setLoading(false);
+  };
+
+  const selectPod = async (pod: PodInfo) => {
+    setSelected(pod);
+    setDetailLoading(true);
+    const detail = await getPodDetail(pod.namespace, pod.name);
+    if (detail) {
+      setSelected(detail.pod);
+      setEvents(detail.events);
+    }
+    setDetailLoading(false);
+  };
+
+  const reset = async () => {
+    await resetDemoScenario();
+    await loadPods();
+  };
+
+  useEffect(() => {
+    loadPods();
+  }, []);
+
+  if (loading) return <Skeleton />;
+  if (error) return <EmptyState icon="⚠️" message={error} />;
+  if (pods.length === 0) return <EmptyState icon="☁" message="集群中暂无 Pod" />;
+  if (!selected) return <EmptyState icon="☁" message="请选择 Pod" />;
+
+  const memoryLimit = selected.resources?.limits?.memory ?? "-";
+  const memoryRequest = selected.resources?.requests?.memory ?? "-";
+  const cpuLimit = selected.resources?.limits?.cpu ?? "-";
+  const cpuRequest = selected.resources?.requests?.cpu ?? "-";
+
+  return (
+    <div className="pod-context">
+      <div className="pod-context__selector">
+        <label className="pod-context__selector-label">当前 Pod</label>
+        <select
+          className="input input--sm"
+          value={`${selected.namespace}/${selected.name}`}
+          onChange={(e) => {
+            const [ns, name] = e.target.value.split("/");
+            const pod = pods.find((p) => p.namespace === ns && p.name === name);
+            if (pod) selectPod(pod);
+          }}
+        >
+          {pods.map((p) => (
+            <option key={`${p.namespace}/${p.name}`} value={`${p.namespace}/${p.name}`}>
+              {p.namespace}/{p.name} ({p.status})
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div className="pod-context__header">
+        <h3>{selected.name}</h3>
+        <div className={classNames("status-dot", selected.status === "Running" && selected.ready ? "status-dot--success" : "status-dot--error")}>
+          {selected.status}
+        </div>
+      </div>
+
+      {detailLoading ? (
+        <Skeleton />
+      ) : (
+        <>
+          <div className="pod-context__grid">
+            <div className="pod-context__field">
+              <span className="pod-context__label">命名空间</span>
+              <span className="pod-context__value">{selected.namespace}</span>
+            </div>
+            <div className="pod-context__field">
+              <span className="pod-context__label">节点</span>
+              <span className="pod-context__value">{selected.nodeName ?? "-"}</span>
+            </div>
+            <div className="pod-context__field">
+              <span className="pod-context__label">Pod IP</span>
+              <span className="pod-context__value">{selected.podIp ?? "-"}</span>
+            </div>
+            <div className="pod-context__field">
+              <span className="pod-context__label">启动时间</span>
+              <span className="pod-context__value">{selected.startedAt ? new Date(selected.startedAt).toLocaleString("zh-CN") : "-"}</span>
+            </div>
+            <div className="pod-context__field">
+              <span className="pod-context__label">重启次数</span>
+              <span className={classNames("pod-context__value", selected.restartCount > 0 && "pod-context__value--danger")}>
+                {selected.restartCount}
+              </span>
+            </div>
+            <div className="pod-context__field">
+              <span className="pod-context__label">就绪</span>
+              <span className="pod-context__value">{selected.ready ? "是" : "否"}</span>
+            </div>
+            <div className="pod-context__field">
+              <span className="pod-context__label">CPU 限制 / 请求</span>
+              <span className="pod-context__value">{cpuLimit} / {cpuRequest}</span>
+            </div>
+            <div className="pod-context__field">
+              <span className="pod-context__label">内存 限制 / 请求</span>
+              <span className="pod-context__value">{memoryLimit} / {memoryRequest}</span>
+            </div>
+          </div>
+
+          {selected.lastState && (
+            <div className="pod-context__last-state">
+              <div className="pod-context__section-title">上次终止状态</div>
+              <div className="pod-context__field">
+                <span className="pod-context__label">原因</span>
+                <span className="pod-context__value pod-context__value--danger">{selected.lastState.reason}</span>
+              </div>
+              <div className="pod-context__field">
+                <span className="pod-context__label">退出码</span>
+                <span className="pod-context__value">{selected.lastState.exitCode}</span>
+              </div>
+              <div className="pod-context__field">
+                <span className="pod-context__label">终止时间</span>
+                <span className="pod-context__value">{new Date(selected.lastState.finishedAt).toLocaleString("zh-CN")}</span>
+              </div>
+            </div>
+          )}
+
+          <div className="pod-context__events">
+            <div className="pod-context__section-title">最近事件</div>
+            {events.length === 0 ? (
+              <div className="pod-context__empty">无事件</div>
+            ) : (
+              events.map((e, i) => (
+                <div key={i} className={classNames("pod-context__event", e.type === "Warning" && "pod-context__event--warning")}>
+                  <span className="pod-context__event-time">{new Date(e.time).toLocaleString("zh-CN")}</span>
+                  <span className={classNames("pod-context__event-type", e.type === "Warning" ? "pod-context__event-type--warning" : "pod-context__event-type--normal")}>
+                    {e.type}
+                  </span>
+                  <span className="pod-context__event-reason">{e.reason}</span>
+                  <span className="pod-context__event-message">{e.message}</span>
+                </div>
+              ))
+            )}
+          </div>
+
+          {isOrderApiDemo && (
+            <button className="btn btn--secondary btn--full" onClick={reset}>
+              重置演示场景
+            </button>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+function EmptyWorkspace({ onNewSession }: { onNewSession: () => void }) {
+  return (
+    <div className="empty-workspace">
+      <div className="empty-workspace__orb" />
+      <h2 className="empty-workspace__title">开始一次智能诊断</h2>
+      <p className="empty-workspace__desc">创建新会话，描述故障现象，让 AI Agent 自动收集证据、分析根因并给出修复建议。</p>
+      <button className="btn btn--primary btn--lg" onClick={onNewSession}>
+        + 新建会话
+      </button>
+      <div className="empty-workspace__examples">
+        <div className="example-chip">order-api Pod OOMKilled</div>
+        <div className="example-chip">OpenStack 创建虚机失败</div>
+        <div className="example-chip">MySQL 磁盘空间不足</div>
+      </div>
+    </div>
+  );
+}
+
+function EmptyState({ icon, message }: { icon: string; message: string }) {
+  return (
+    <div className="empty-state">
+      <div className="empty-state__icon">{icon}</div>
+      <div className="empty-state__message">{message}</div>
+    </div>
+  );
+}
+
+function Skeleton() {
+  return (
+    <div className="skeleton-list">
+      <div className="skeleton-row" />
+      <div className="skeleton-row" />
+      <div className="skeleton-row" />
+    </div>
+  );
+}
+
+function formatMarkdown(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/```([\s\S]*?)```/g, "<pre><code>$1</code></pre>")
+    .replace(/`([^`]+)`/g, "<code>$1</code>")
+    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+    .replace(/\n/g, "<br />");
 }
