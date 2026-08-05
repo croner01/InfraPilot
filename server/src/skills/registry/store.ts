@@ -16,6 +16,7 @@ export interface EmbeddingStore<T> {
   add(id: string, item: T, vector: EmbeddingVector): void;
   search(query: EmbeddingVector, topK: number, minScore?: number): SearchResult<T>[];
   clear(): void;
+  remove(id: string): void;
 }
 
 function normalizeSparse(weights: Record<string, number>): Record<string, number> {
@@ -63,5 +64,9 @@ export class InMemoryEmbeddingStore<T> implements EmbeddingStore<T> {
 
   clear(): void {
     this.entries = [];
+  }
+
+  remove(id: string): void {
+    this.entries = this.entries.filter((e) => e.id !== id);
   }
 }

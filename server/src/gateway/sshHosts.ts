@@ -15,7 +15,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-export type AuthType = "password" | "privateKey" | "agent";
+export type AuthType = "password" | "privateKey" | "agent" | "mcp";
 
 export interface HostAuth {
   type: AuthType;
@@ -27,10 +27,14 @@ export interface HostAuth {
   privateKeyPath?: string;
   /** 私钥内容来自哪个环境变量 */
   privateKeyEnv?: string;
+  /** 私钥明文内容(不推荐,仅用于 demo/测试;生产环境请用 privateKeyPath 或 privateKeyEnv) */
+  privateKey?: string;
   /** 私钥 passphrase */
   passphrase?: string;
   /** passphrase 来自哪个环境变量 */
   passphraseEnv?: string;
+  /** MCP gRPC endpoint, e.g. 10.0.0.1:8443 */
+  endpoint?: string;
 }
 
 export interface HostEntry {
@@ -105,7 +109,7 @@ function parseYamlLike(content: string): HostRegistry {
     const key = kv[0].trim();
     const value = kv.slice(1).join(":").trim().replace(/^["']|["']$/g, "");
 
-    if (indent >= 4 && ["type", "password", "passwordEnv", "privateKeyPath", "privateKeyEnv", "passphrase", "passphraseEnv"].includes(key)) {
+    if (indent >= 4 && ["type", "password", "passwordEnv", "privateKeyPath", "privateKeyEnv", "privateKey", "passphrase", "passphraseEnv", "endpoint"].includes(key)) {
       (currentAuth as any)[key] = value;
     } else if (key === "auth") {
       // auth: 行本身无值,子项缩进
@@ -189,6 +193,9 @@ export function resolveAuthSecret(auth: HostAuth): HostAuth {
 }
 
 export function getPrivateKeyContent(auth: HostAuth): string | undefined {
+  if (auth.privateKey) {
+    return auth.privateKey;
+  }
   if (auth.privateKeyEnv && process.env[auth.privateKeyEnv]) {
     return process.env[auth.privateKeyEnv];
   }

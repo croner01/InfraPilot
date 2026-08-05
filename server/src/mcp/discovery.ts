@@ -28,9 +28,27 @@ function parseMcpEndpoints(): EndpointMap {
 }
 
 export function discoverTransport(host: string): HostTransport {
+  // 1. 优先从 Host Registry 读取 MCP 配置（前端统一配置）
+  const registry = loadHostRegistry();
+  const registryHost = findHost(registry, host);
+  if (registryHost?.auth.type === "mcp" && registryHost.auth.endpoint) {
+    const endpoint: McpEndpoint = {
+      host,
+      transport: "grpc",
+      grpcTarget: registryHost.auth.endpoint,
+    };
+    return {
+      host,
+      mcpEnabled: true,
+      mcpEndpoint: endpoint,
+      // MCP 主机不再走 SSH fallback，避免把 gRPC endpoint 误当成 SSH 地址
+      sshFallback: false,
+    };
+  }
+
+  // 2. 兜底：MCP_ENDPOINTS 环境变量（兼容旧配置）
   const endpoints = parseMcpEndpoints();
   const target = endpoints[host];
-
   if (target) {
     const endpoint: McpEndpoint = {
       host,
@@ -45,14 +63,13 @@ export function discoverTransport(host: string): HostTransport {
     };
   }
 
-  // 尝试 SSH Host Registry 作为 fallback
-  const registry = loadHostRegistry();
-  const sshHost = findHost(registry, host);
+  // 3. SSH Host Registry 作为 fallback
+  const sshHost = registryHost;
 
   return {
     host,
     mcpEnabled: false,
-    sshFallback: !!sshHost,
+    sshFallback: !!sshHost && sshHost.auth.type !== "mcp",
   };
 }
 

@@ -9,7 +9,7 @@
 import { EventEmitter } from "node:events";
 import { v4 as uuidv4 } from "uuid";
 import { AgentSession, TimelineEvent, TimelineEventType } from "../types.js";
-import { upsertSession, getSession as dbGetSession, listSessions as dbListSessions } from "../db/db.js";
+import { upsertSession, getSession as dbGetSession, listSessions as dbListSessions, insertTimelineEvent } from "../db/db.js";
 
 const sessions = new Map<string, AgentSession>();
 export const bus = new EventEmitter();
@@ -31,6 +31,7 @@ export function createSession(title: string): AgentSession {
   };
   sessions.set(session.id, session);
   persist(session);
+  emitEvent(session.id, "session_created", { title });
   return session;
 }
 
@@ -67,6 +68,15 @@ export function terminateSession(id: string): AgentSession | undefined {
   return session;
 }
 
+export function updateSessionTitle(id: string, title: string): AgentSession | undefined {
+  const session = getSession(id);
+  if (!session) return undefined;
+  session.title = title || session.title;
+  session.updatedAt = new Date().toISOString();
+  persist(session);
+  return session;
+}
+
 function persist(session: AgentSession) {
   upsertSession(session.id, session.title, session.status, JSON.stringify(session));
 }
@@ -79,6 +89,18 @@ export function emitEvent(sessionId: string, type: TimelineEventType, payload: u
     timestamp: new Date().toISOString(),
     payload,
   };
+  try {
+    insertTimelineEvent({
+      id: event.id,
+      session_id: sessionId,
+      type,
+      payload: JSON.stringify(payload),
+      timestamp: event.timestamp,
+    });
+  } catch (err) {
+    // 事件持久化失败不应阻断实时推送
+    console.error("[emitEvent] failed to persist timeline event", err);
+  }
   bus.emit("event", event);
   return event;
 }

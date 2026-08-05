@@ -31,6 +31,11 @@ if (process.env.MCP_SERVER_MODE === "true") {
     const { ALL_TOOLS } = await import("./gateway/policy.js");
     await buildRegistry(ALL_TOOLS);
 
+    // 将 runtime-config.json 中的远程主机同步到 SSH_HOSTS，确保 sshProxy 能读取
+    const { syncRuntimeHostsToEnv, syncMcpEnv } = await import("./config/store.js");
+    syncRuntimeHostsToEnv();
+    syncMcpEnv();
+
     // 启动时自动恢复所有 awaiting_approval 会话
     const { listAwaitingApprovalSessions } = await import("./db/db.js");
     const { resumeAgentTurn } = await import("./agent/orchestrator.js");
@@ -55,10 +60,8 @@ if (process.env.MCP_SERVER_MODE === "true") {
 
     server.listen(PORT, () => {
       console.log(`[InfraPilot Server] listening on :${PORT}`);
-      // order-api 演示工作负载已部署为真实K8s Deployment(见 server/k8s-manifests/),
-      // 这里只需启动日志采集管道(真实Pod日志 -> 真实OpenSearch)
+      // 启动日志采集管道；具体采集目标由 data/runtime-config.json / LOG_SHIP_TARGETS 决定
       startLogShipper();
-      console.log("[LogShipper] order-api 真实Pod日志采集管道已启动 -> OpenSearch order-api-logs-*");
     });
 
     process.on("SIGTERM", () => {

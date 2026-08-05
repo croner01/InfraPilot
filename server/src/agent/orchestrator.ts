@@ -9,19 +9,35 @@
 // AgentCheckpoint，使 Server 重启后可以从 awaiting_approval 状态恢复。
 // ============================================================================
 
-import { getSession } from "./sessionStore.js";
+import { getSession, updateSession } from "./sessionStore.js";
 import { createInitialCheckpoint, runAgentStep } from "./runner.js";
-import { loadCheckpoint } from "./checkpoint.js";
+import { loadCheckpoint, saveCheckpoint } from "./checkpoint.js";
 
 /**
  * 用户发送新消息时调用。
- * 创建初始 checkpoint 并启动 runner。
+ * 如果会话已有 checkpoint（上一轮的对话历史），则在其上追加用户消息并继续；
+ * 否则创建初始 checkpoint 并启动 runner。
  */
 export async function startAgentTurn(sessionId: string, userMessage: string): Promise<void> {
   const session = getSession(sessionId);
   if (!session) throw new Error("session not found");
 
-  const checkpoint = await createInitialCheckpoint(sessionId, userMessage);
+  let checkpoint = loadCheckpoint(sessionId);
+  if (checkpoint) {
+    // 延续已有对话：保留历史上下文，追加当前消息，重置本轮迭代计数
+    checkpoint.history.push({ role: "user", content: userMessage });
+    checkpoint.iteration = 0;
+    checkpoint.status = "planning";
+    saveCheckpoint(checkpoint);
+    updateSession(sessionId, (s) => {
+      s.status = "planning";
+      s.iteration = 0;
+      if (!s.incidentSummary) s.incidentSummary = userMessage;
+    });
+  } else {
+    checkpoint = await createInitialCheckpoint(sessionId, userMessage);
+  }
+
   const { done } = await runAgentStep(sessionId, checkpoint);
 
   // 若 runner 因遇到审批而退出，orchestrator 不再阻塞；
