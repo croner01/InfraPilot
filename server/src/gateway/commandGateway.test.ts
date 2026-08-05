@@ -57,13 +57,13 @@ describe("commandGateway approval and args hash validation", () => {
     expect(insertAudit).toHaveBeenCalled();
   });
 
-  it("rejects execution when approval is required but not approved", async () => {
-    const pending = makePending({ approved: false });
+  it("rejects execution when approval is required but no approval token is present", async () => {
+    const pending = makePending({ approved: false, approvalId: undefined, argsHash: undefined });
 
     const result = await executeToolCall(pending, { sessionId: "s1", callerAgent: "agent" });
 
     expect(result.success).toBe(false);
-    expect(result.error).toContain("需要审批但尚未获得批准");
+    expect(result.error).toContain("缺少审批令牌");
     expect(executeLinuxTool).not.toHaveBeenCalled();
   });
 
@@ -110,6 +110,22 @@ describe("commandGateway approval and args hash validation", () => {
 
   it("executes approved tool when args hash matches", async () => {
     const pending = makePending();
+    (getApproval as ReturnType<typeof vi.fn>).mockReturnValue({
+      id: "approval-1",
+      decision: "approved",
+      args_hash: pending.argsHash,
+    });
+    (executeLinuxTool as ReturnType<typeof vi.fn>).mockResolvedValue({ success: true, stdout: "ok", durationMs: 10 });
+
+    const result = await executeToolCall(pending, { sessionId: "s1", callerAgent: "agent", approvedBy: "admin" });
+
+    expect(result.success).toBe(true);
+    expect(executeLinuxTool).toHaveBeenCalledWith("restart_service", { service: "nginx" });
+    expect(insertAudit).toHaveBeenCalled();
+  });
+
+  it("executes when DB approval is approved even if pending.approved flag is not set (resume path)", async () => {
+    const pending = makePending({ approved: false });
     (getApproval as ReturnType<typeof vi.fn>).mockReturnValue({
       id: "approval-1",
       decision: "approved",

@@ -14,6 +14,7 @@ import { executeTraceTool } from "../skills/trace/tools.js";
 import { executeKnowledgeTool } from "../skills/knowledge/tools.js";
 import { executeTopologyTool } from "../skills/topology/tools.js";
 import { executeOpenStackTool } from "../skills/openstack/tools.js";
+import { executeDrawioTool } from "../skills/drawio/tools.js";
 import { insertAudit, getApproval } from "../db/db.js";
 import { computeArgsHash } from "./argsHash.js";
 
@@ -35,6 +36,8 @@ async function dispatch(skill: string, tool: string, args: Record<string, unknow
       return executeTopologyTool(tool, args);
     case "openstack":
       return executeOpenStackTool(tool, args);
+    case "drawio":
+      return executeDrawioTool(tool, args);
     default:
       return { success: false, error: `未知skill: ${skill}`, durationMs: 0 };
   }
@@ -49,17 +52,19 @@ export interface ExecuteOptions {
 /**
  * 执行一个已通过风险判定的工具调用。
  * - readonly/low: 直接执行
- * - medium/high/critical: 必须携带 approvedBy, 且 pendingCall.approved === true,
- *   审批令牌(approvalId)必须与本次 tool+args 一致(防篡改, 对应§8.3第2点)
+ * - medium/high/critical: 必须携带 approvalId, 且审批记录 decision=approved,
+ *   审批令牌(approvalId)必须与本次 tool+args 一致(防篡改, 对应§8.3第2点)。
+ *   已批准状态以审批记录(DB)为准, 不依赖 pendingCall.approved 标志
+ *   (该标志在审批恢复路径中不会被置位, 只用于前端展示)。
  */
 export async function executeToolCall(pendingCall: PendingToolCall, opts: ExecuteOptions): Promise<ToolExecutionResult> {
   const startedAt = new Date().toISOString();
   const start = Date.now();
 
-  if (pendingCall.risk.requiresApproval && !pendingCall.approved) {
+  if (pendingCall.risk.requiresApproval && !pendingCall.approvalId) {
     const result: ToolExecutionResult = {
       success: false,
-      error: "该操作需要审批但尚未获得批准,已拒绝执行",
+      error: "该操作需要审批但缺少审批令牌,已拒绝执行",
       durationMs: Date.now() - start,
     };
     writeAudit(pendingCall, opts, result, startedAt);
