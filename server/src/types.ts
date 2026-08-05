@@ -8,7 +8,7 @@ import type OpenAI from "openai";
 export type RiskLevel = "readonly" | "low" | "medium" | "high" | "critical";
 
 export type SkillName = "linux" | "k8s" | "elk" | "clickhouse" | "openstack"
-  | "trace" | "knowledge" | "topology";
+  | "trace" | "knowledge" | "topology" | "drawio";
 
 export interface ToolDef {
   name: string;
@@ -94,10 +94,11 @@ export interface RootCause {
 
 export interface RemediationStep {
   description: string;
-  skill: SkillName;
-  tool: string;
-  args: Record<string, unknown>;
-  risk: RiskLevel;
+  /** 可选：LLM 输出中检测到的工具名（如 k8s.patch_resource_limits） */
+  skill?: SkillName;
+  tool?: string;
+  args?: Record<string, unknown>;
+  risk?: RiskLevel;
   rollback?: string;
 }
 
@@ -215,6 +216,21 @@ export interface KnowledgeCase extends KnowledgeCaseInput {
   id: string;
   createdAt: string;
   resolved: boolean;
+}
+
+// -------------------- 跨会话记忆 --------------------
+
+export interface SessionMemoryInput {
+  sessionId: string;
+  title: string;
+  summary: string;
+  tags?: string[];
+}
+
+export interface SessionMemory extends SessionMemoryInput {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 

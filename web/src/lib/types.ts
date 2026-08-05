@@ -50,3 +50,80 @@ export interface HostEntry {
 export interface HostRegistry {
   hosts: HostEntry[];
 }
+
+export interface Evidence {
+  id: string;
+  sourceSkill?: string;
+  type: string;
+  content: any;
+  confidence: number;
+  collectedAt: string;
+  summary: string;
+}
+
+export interface ToolExecutionResult {
+  success: boolean;
+  data?: any;
+  error?: string;
+  stdout?: string;
+  stderr?: string;
+  durationMs: number;
+}
+
+export interface ExecutedToolCall {
+  id: string;
+  skill: string;
+  tool: string;
+  args: Record<string, unknown>;
+  result: ToolExecutionResult;
+  startedAt: string;
+  finishedAt: string;
+}
+
+export interface RemediationStep {
+  description: string;
+  skill?: string;
+  tool?: string;
+  args?: Record<string, unknown>;
+  risk?: RiskLevel;
+  rollback?: string;
+}
+
+export interface Remediation {
+  summary: string;
+  steps: RemediationStep[];
+}
+
+export interface RootCause {
+  summary: string;
+  confidence: number;
+  evidenceChain: { evidenceId: string; role: string }[];
+  alternativeHypotheses: string[];
+}
+
+export type SessionStatus =
+  | "intake"
+  | "planning"
+  | "executing"
+  | "awaiting_approval"
+  | "reflecting"
+  | "concluded"
+  | "remediating"
+  | "closed";
+
+export interface AgentSession {
+  id: string;
+  title: string;
+  status: SessionStatus;
+  createdAt: string;
+  updatedAt: string;
+  incidentSummary?: string;
+  plan: string[];
+  evidence: Evidence[];
+  pendingToolCalls: any[];
+  executedToolCalls: ExecutedToolCall[];
+  rootCause?: RootCause;
+  remediation?: Remediation;
+  iteration: number;
+  maxIterations: number;
+}
