@@ -9,7 +9,7 @@
 
 import { v4 as uuidv4 } from "uuid";
 import OpenAI from "openai";
-import { openai, REASONING_MODEL } from "../llm/client.js";
+import { openai, getReasoningModel } from "../llm/client.js";
 import { buildSystemPrompt } from "./prompts.js";
 import { ALL_TOOLS, classifyRisk, renderDiffPreview } from "../gateway/policy.js";
 import { buildRegistry, recallTools } from "../skills/registry/skillRegistry.js";
@@ -19,6 +19,8 @@ import { computeArgsHash } from "../gateway/argsHash.js";
 import { emitEvent, getSession, updateSession } from "./sessionStore.js";
 import { insertApproval, decideApproval as dbDecideApproval, getApproval } from "../db/db.js";
 import { saveCheckpoint, loadCheckpoint, deleteCheckpoint } from "./checkpoint.js";
+import { buildMemoryContext, extractAndStoreSessionMemory } from "./memoryStore.js";
+import { extractPlan, extractRemediation } from "./plan.js";
 import {
   AgentCheckpoint,
   AgentSession,
@@ -123,7 +125,8 @@ async function buildInitialHistory(sessionId: string, userMessage: string): Prom
   const availableTools = recalled.map((r) => r.tool);
 
   const similarCases = await fetchSimilarCases(recallQuery);
-  const systemPrompt = buildSystemPrompt(buildToolListMarkdown(availableTools) + similarCases);
+  const memoryContext = await buildMemoryContext(recallQuery);
+  const systemPrompt = buildSystemPrompt(buildToolListMarkdown(availableTools) + similarCases + memoryContext);
 
   updateSession(sessionId, (s) => {
     s.status = "planning";
@@ -176,7 +179,7 @@ async function executeSingleToolCall(
       finishedAt: new Date().toISOString(),
     });
   });
-  emitEvent(sessionId, "tool_call_result", { toolCallId: pending.id, skill: pending.skill, tool: pending.tool, result });
+  emitEvent(sessionId, "tool_call_result", { toolCallId: pending.id, skill: pending.skill, tool: pending.tool, args: pending.args, result });
 
   if (result.success && pending.risk.level === "readonly") {
     const evidence = evidenceFromResult(pending.skill, pending.tool, pending.args, result.data ?? result.stdout);
@@ -237,7 +240,7 @@ export async function runAgentStep(
     const tools = toOpenAiTools(availableTools);
 
     const completion = await openai.chat.completions.create({
-      model: REASONING_MODEL,
+      model: getReasoningModel(),
       messages: checkpoint.history,
       tools,
       tool_choice: "auto",
@@ -250,6 +253,24 @@ export async function runAgentStep(
 
     if (msg.content) {
       emitEvent(sessionId, "assistant_message", { content: msg.content });
+
+      // 结构化输出：诊断计划 / 修复方案
+      const plan = extractPlan(msg.content);
+      if (plan.length > 0) {
+        updateSession(sessionId, (s) => {
+          s.plan = plan;
+        });
+        emitEvent(sessionId, "plan_update", { plan });
+      }
+
+      const remediation = extractRemediation(msg.content);
+      if (remediation) {
+        updateSession(sessionId, (s) => {
+          s.remediation = remediation;
+        });
+        emitEvent(sessionId, "remediation_plan", { summary: remediation.summary, steps: remediation.steps });
+      }
+
       const rcaMatch = msg.content.match(/【根因分析结论】([\s\S]*)/);
       if (rcaMatch) {
         updateSession(sessionId, (s) => {
@@ -272,7 +293,10 @@ export async function runAgentStep(
         if (s.status !== "concluded") s.status = "closed";
       });
       emitEvent(sessionId, "done", {});
-      deleteCheckpoint(sessionId);
+      // 保留 checkpoint 而不是删除，以便后续用户追问时能够延续上下文。
+      // startAgentTurn 会在下一条消息到达时复用该 checkpoint。
+      saveCheckpoint(checkpoint);
+      extractAndStoreSessionMemory(sessionId).catch(() => {});
       return { checkpoint, done: true };
     }
 
@@ -350,6 +374,7 @@ export async function runAgentStep(
   emitEvent(sessionId, "status", { status: "max_iterations_reached", message: "已达最大迭代次数,请查看当前证据或补充说明" });
   emitEvent(sessionId, "done", {});
   deleteCheckpoint(sessionId);
+  extractAndStoreSessionMemory(sessionId).catch(() => {});
   return { checkpoint, done: true };
 }
 

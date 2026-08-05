@@ -8,7 +8,7 @@ vi.mock("../llm/client.js", () => ({
       },
     },
   },
-  REASONING_MODEL: "test-model",
+  getReasoningModel: () => "test-model",
 }));
 
 vi.mock("../skills/registry/skillRegistry.js", () => ({
@@ -67,6 +67,12 @@ vi.mock("./prompts.js", () => ({
   buildSystemPrompt: vi.fn((tools: string) => `system prompt\n${tools}`),
 }));
 
+vi.mock("./memoryStore.js", () => ({
+  buildMemoryContext: vi.fn().mockResolvedValue(""),
+  extractAndStoreSessionMemory: vi.fn().mockResolvedValue(undefined),
+  resetMemoryStore: vi.fn(),
+}));
+
 import { openai } from "../llm/client.js";
 import { classifyRisk, renderDiffPreview } from "../gateway/policy.js";
 import { executeToolCall } from "../gateway/commandGateway.js";
@@ -75,6 +81,7 @@ import { insertApproval, getApproval, db } from "../db/db.js";
 import { buildRegistry, recallTools } from "../skills/registry/skillRegistry.js";
 import { runAgentStep, createInitialCheckpoint } from "./runner.js";
 import { loadCheckpoint, deleteCheckpoint, saveCheckpoint } from "./checkpoint.js";
+import { buildMemoryContext } from "./memoryStore.js";
 import type { AgentSession, AgentCheckpoint, RiskDecision, ToolDef } from "../types.js";
 
 function resetState() {
@@ -180,7 +187,41 @@ describe("agent runner", () => {
     expect(executeToolCall).toHaveBeenCalledTimes(1);
     expect(session.executedToolCalls).toHaveLength(1);
     expect(session.status).toBe("concluded");
-    expect(loadCheckpoint(sessionId)).toBeUndefined();
+    // checkpoint 保留以便后续追问能延续上下文
+    expect(loadCheckpoint(sessionId)).toBeDefined();
+  });
+
+  it("populates plan and remediation from assistant content", async () => {
+    const sessionId = "s1";
+    const session = makeSession(sessionId);
+    sessions.set(sessionId, session);
+
+    (openai.chat.completions.create as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      choices: [
+        {
+          message: {
+            role: "assistant",
+            content:
+              "【诊断计划】\n1. 查看 Pod 状态\n2. 检索错误日志\n【修复方案】\n1. 调整内存 limit: k8s.patch_resource_limits",
+          },
+        },
+      ],
+    });
+
+    const cp = await createInitialCheckpoint(sessionId, "pod 重启");
+    const { done } = await runAgentStep(sessionId, cp);
+
+    expect(done).toBe(true);
+    expect(session.plan).toEqual(["查看 Pod 状态", "检索错误日志"]);
+    expect(session.remediation?.steps).toHaveLength(1);
+    expect(session.remediation?.steps[0].skill).toBe("k8s");
+    expect(session.remediation?.steps[0].tool).toBe("patch_resource_limits");
+    expect(emitEvent).toHaveBeenCalledWith(
+      sessionId,
+      "plan_update",
+      expect.objectContaining({ plan: ["查看 Pod 状态", "检索错误日志"] })
+    );
+    expect(emitEvent).toHaveBeenCalledWith(sessionId, "remediation_plan", expect.objectContaining({ steps: expect.any(Array) }));
   });
 
   it("saves checkpoint and exits when encountering high-risk tool", async () => {
@@ -259,7 +300,8 @@ describe("agent runner", () => {
     expect(done).toBe(true);
     expect(executeToolCall).toHaveBeenCalledTimes(1);
     expect(session.executedToolCalls).toHaveLength(1);
-    expect(loadCheckpoint(sessionId)).toBeUndefined();
+    // checkpoint 保留以便后续追问能延续上下文
+    expect(loadCheckpoint(sessionId)).toBeDefined();
   });
 
   it("emits checkpoint_saved event after each state change", async () => {
@@ -297,5 +339,28 @@ describe("agent runner", () => {
     const calls = (emitEvent as ReturnType<typeof vi.fn>).mock.calls;
     const savedCalls = calls.filter((c) => c[1] === "checkpoint_saved");
     expect(savedCalls.length).toBeGreaterThan(0);
+  });
+
+  it("injects cross-session memory context into system prompt", async () => {
+    const sessionId = "s-memory-ctx";
+    sessions.set(sessionId, makeSession(sessionId));
+
+    (buildMemoryContext as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+      "\n# 相关历史会话记忆\n- memory_id=m1 虚拟机创建流程\n"
+    );
+
+    (openai.chat.completions.create as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      choices: [{ message: { role: "assistant", content: "收到。" } }],
+    });
+
+    const cp = await createInitialCheckpoint(sessionId, "画个虚拟机创建的流程图");
+    await runAgentStep(sessionId, cp);
+
+    const calls = (openai.chat.completions.create as ReturnType<typeof vi.fn>).mock.calls;
+    const firstCall = calls[0];
+    const messages = firstCall[0].messages as Array<{ role: string; content: string }>;
+    const systemMsg = messages.find((m) => m.role === "system");
+    expect(systemMsg?.content).toContain("相关历史会话记忆");
+    expect(systemMsg?.content).toContain("虚拟机创建流程");
   });
 });
