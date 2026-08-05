@@ -8,7 +8,10 @@ import Database from "better-sqlite3";
 import fs from "node:fs";
 import path from "node:path";
 
-const DATA_DIR = path.join(process.cwd(), "data");
+// 允许通过环境变量隔离测试数据库，避免测试误删开发数据
+const DATA_DIR = process.env.INFRAPILOT_DATA_DIR
+  ? path.resolve(process.env.INFRAPILOT_DATA_DIR)
+  : path.join(process.cwd(), "data");
 fs.mkdirSync(DATA_DIR, { recursive: true });
 const DB_PATH = path.join(DATA_DIR, "infrapilot.sqlite");
 
