@@ -76,6 +76,25 @@ CREATE TABLE IF NOT EXISTS session_checkpoints (
   checkpoint_json TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS timeline_events (
+  id TEXT PRIMARY KEY,
+  session_id TEXT NOT NULL,
+  type TEXT NOT NULL,
+  payload TEXT NOT NULL,
+  timestamp TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS session_memories (
+  id TEXT PRIMARY KEY,
+  session_id TEXT NOT NULL UNIQUE,
+  title TEXT NOT NULL,
+  summary TEXT NOT NULL,
+  tags TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  embedding TEXT
+);
 `);
 
 function addColumnIfMissing(table: string, column: string, definition: string) {
@@ -98,6 +117,10 @@ const approvalColumns = db.pragma("table_info(approvals)") as Array<{ name: stri
 if (!approvalColumns.some((c) => c.name === "args_hash")) {
   db.exec(`ALTER TABLE approvals ADD COLUMN args_hash TEXT NOT NULL DEFAULT ''`);
 }
+
+// 迁移：为旧版 session_memories 表补充列
+addColumnIfMissing("session_memories", "tags", "TEXT");
+addColumnIfMissing("session_memories", "embedding", "TEXT");
 
 export interface AuditRow {
   id: string;
@@ -153,7 +176,7 @@ export function insertApproval(row: {
 }) {
   db.prepare(`
     INSERT INTO approvals (id, session_id, skill, tool, args, args_hash, risk_level, diff_preview, decision, requested_at)
-    VALUES (?,?,?,?,?,?,?, 'pending', ?)
+    VALUES (?,?,?,?,?,?,?,?, 'pending', ?)
   `).run(row.id, row.sessionId, row.skill, row.tool, row.args, row.argsHash, row.riskLevel, row.diffPreview, new Date().toISOString());
 }
 
@@ -228,6 +251,29 @@ export function listCases(): CaseRow[] {
   return db.prepare(`SELECT * FROM incident_cases ORDER BY created_at DESC LIMIT 200`).all() as CaseRow[];
 }
 
+// -------------------- timeline_events（会话时间线事件持久化） --------------------
+
+export interface TimelineEventRow {
+  id: string;
+  session_id: string;
+  type: string;
+  payload: string;
+  timestamp: string;
+}
+
+export function insertTimelineEvent(row: TimelineEventRow) {
+  db.prepare(`
+    INSERT INTO timeline_events (id, session_id, type, payload, timestamp)
+    VALUES (?, ?, ?, ?, ?)
+  `).run(row.id, row.session_id, row.type, row.payload, row.timestamp);
+}
+
+export function listTimelineEvents(sessionId: string): TimelineEventRow[] {
+  return db.prepare(`
+    SELECT * FROM timeline_events WHERE session_id = ? ORDER BY timestamp ASC
+  `).all(sessionId) as TimelineEventRow[];
+}
+
 // -------------------- session_checkpoints（LangGraph Checkpoint 持久化） --------------------
 
 export function saveCheckpoint(sessionId: string, checkpointJson: string) {
@@ -247,6 +293,59 @@ export function loadCheckpoint(sessionId: string): { checkpoint_json: string } |
 
 export function deleteCheckpoint(sessionId: string) {
   db.prepare(`DELETE FROM session_checkpoints WHERE session_id = ?`).run(sessionId);
+}
+
+// -------------------- session_memories（跨会话记忆） --------------------
+
+export interface MemoryRow {
+  id: string;
+  session_id: string;
+  title: string;
+  summary: string;
+  tags?: string;
+  created_at: string;
+  updated_at: string;
+  embedding?: string;
+}
+
+export function insertMemory(row: MemoryRow) {
+  db.prepare(`
+    INSERT INTO session_memories (id, session_id, title, summary, tags, created_at, updated_at, embedding)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(session_id) DO UPDATE SET
+      title=excluded.title,
+      summary=excluded.summary,
+      tags=excluded.tags,
+      updated_at=excluded.updated_at,
+      embedding=excluded.embedding
+  `).run(
+    row.id,
+    row.session_id,
+    row.title,
+    row.summary,
+    row.tags ?? null,
+    row.created_at,
+    row.updated_at,
+    row.embedding ?? null
+  );
+}
+
+export function getMemory(id: string): MemoryRow | undefined {
+  return db.prepare(`SELECT * FROM session_memories WHERE id = ?`).get(id) as MemoryRow | undefined;
+}
+
+export function getMemoryBySessionId(sessionId: string): MemoryRow | undefined {
+  return db.prepare(`SELECT * FROM session_memories WHERE session_id = ?`).get(sessionId) as
+    | MemoryRow
+    | undefined;
+}
+
+export function listMemories(): MemoryRow[] {
+  return db.prepare(`SELECT * FROM session_memories ORDER BY updated_at DESC`).all() as MemoryRow[];
+}
+
+export function deleteMemory(id: string) {
+  db.prepare(`DELETE FROM session_memories WHERE id = ?`).run(id);
 }
 
 export function listAwaitingApprovalSessions(): { id: string; title: string; status: string; created_at: string; updated_at: string }[] {
