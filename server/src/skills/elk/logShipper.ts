@@ -12,16 +12,40 @@
 //
 // 支持多命名空间/多 Pod 前缀配置,通过环境变量 LOG_SHIP_TARGETS 注入 JSON 数组:
 //   LOG_SHIP_TARGETS='[{"namespace":"order-service","podNamePrefix":"order-api","indexPrefix":"order-api-logs"}]'
+// podNamePrefix 留空表示采集该 namespace 下全部 Pod。
+// 日志根目录默认 /var/log/pods,可通过环境变量 PODS_LOG_ROOT 覆盖(便于测试/容器化部署)。
 // ============================================================================
 
 import fs from "node:fs";
 import path from "node:path";
 import { Client } from "@opensearch-project/opensearch";
+import { getDefaultElkBackend, getLegacyElkConfig } from "../../config/store.js";
+import type { ElkBackend } from "../../config/types.js";
 
-const OPENSEARCH_NODE = process.env.OPENSEARCH_NODE ?? "http://127.0.0.1:9200";
-const PODS_LOG_ROOT = "/var/log/pods";
+function podsLogRoot(): string {
+  return process.env.PODS_LOG_ROOT ?? "/var/log/pods";
+}
 
-export const osClient = new Client({ node: OPENSEARCH_NODE });
+let _osClient: Client | null = null;
+let _osNode: string | null = null;
+
+function createOsClient(): Client {
+  const backend = getDefaultElkBackend();
+  const node = backend?.node ?? getLegacyElkConfig().node;
+  if (!_osClient || _osNode !== node) {
+    _osClient = new Client({ node });
+    _osNode = node;
+  }
+  return _osClient;
+}
+
+/** 保持向后兼容：osClient 访问时始终拿到当前配置节点对应的 Client */
+export const osClient = new Proxy({} as Client, {
+  get(_, prop: string | symbol) {
+    const client = createOsClient();
+    return (client as any)[prop];
+  },
+});
 
 export interface ShipTarget {
   namespace: string;
@@ -29,28 +53,65 @@ export interface ShipTarget {
   indexPrefix: string;
 }
 
-/** 从环境变量读取采集目标,未配置时默认只采集 order-service/order-api */
-function parseShipTargets(): ShipTarget[] {
-  const env = process.env.LOG_SHIP_TARGETS;
-  if (env) {
-    try {
-      const parsed = JSON.parse(env) as ShipTarget[];
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        for (const t of parsed) {
-          if (!t.namespace || !t.podNamePrefix || !t.indexPrefix) {
-            throw new Error(`采集目标格式错误: ${JSON.stringify(t)}`);
-          }
-        }
-        return parsed;
-      }
-    } catch (e: any) {
-      console.warn("[logShipper] LOG_SHIP_TARGETS 解析失败,使用默认目标:", e?.message ?? e);
-    }
-  }
-  return [{ namespace: "order-service", podNamePrefix: "order-api", indexPrefix: "order-api-logs" }];
+export interface ShipTargetStatus {
+  target: ShipTarget;
+  fileCount: number;
+  lastScannedAt?: string;
+  lastShippedAt?: string;
+  lastShippedCount: number;
+  totalShipped: number;
+  lastError?: string;
+  lastErrorAt?: string;
+  warning?: string;
 }
 
-export const SHIP_TARGETS = parseShipTargets();
+/** 运行时配置中的采集目标，可通过 reloadShipTargets() 热重载 */
+export let SHIP_TARGETS: ShipTarget[] = [];
+
+/** 每个采集目标最近一次采集的状态，供 /api/config/log-systems/:id/ship-status 查询 */
+export const SHIP_STATUS = new Map<string, ShipTargetStatus>();
+
+/** 目标 key: namespace|podNamePrefix|indexPrefix */
+function targetKey(t: ShipTarget): string {
+  return `${t.namespace}|${t.podNamePrefix}|${t.indexPrefix}`;
+}
+
+function ensureShipStatus(key: string, target: ShipTarget): ShipTargetStatus {
+  let s = SHIP_STATUS.get(key);
+  if (!s) {
+    s = { target, fileCount: 0, lastShippedCount: 0, totalShipped: 0 };
+    SHIP_STATUS.set(key, s);
+  }
+  return s;
+}
+
+/** 返回所有已配置采集目标的采集状态(尚未扫描的目标给出占位状态) */
+export function getShipStatus(): ShipTargetStatus[] {
+  return SHIP_TARGETS.map((t) => {
+    const s = SHIP_STATUS.get(targetKey(t));
+    if (s) return s;
+    return {
+      target: t,
+      fileCount: 0,
+      lastShippedCount: 0,
+      totalShipped: 0,
+      warning: "尚未扫描,等待下一次采集",
+    };
+  });
+}
+
+/** 记录哪些目标已经打过"0 个日志文件"告警，避免每 2 秒刷屏 */
+const warnedZeroFiles = new Set<string>();
+
+export function reloadShipTargets(): void {
+  const backend = getDefaultElkBackend();
+  const targets = backend?.targets ?? getLegacyElkConfig().targets;
+  SHIP_TARGETS.length = 0;
+  SHIP_TARGETS.push(...targets);
+}
+
+// 模块初始化时从持久化配置加载一次
+reloadShipTargets();
 
 /**
  * 根据 namespace / index_prefix 解析应查询的 OpenSearch index pattern。
@@ -76,8 +137,8 @@ export function resolveIndexPattern(options?: {
   if (namespace) {
     matched = targets.filter((t) => t.namespace === namespace);
     if (matched.length === 0) {
-      console.warn(`[elk] 未找到 namespace=${namespace} 对应的采集目标,回退到全部索引`);
-      matched = targets;
+      console.warn(`[elk] 未找到 namespace=${namespace} 对应的采集目标,显式 namespace 查询返回空(不再回退全部索引)`);
+      return "";
     }
   } else if (!all) {
     // 默认未指定 namespace 时仍然查询全部已配置 target，保持与先前行为一致
@@ -146,13 +207,16 @@ function extractPodName(dirName: string, namespace: string): string {
   return lastUnderscore > 0 ? rest.slice(0, lastUnderscore) : rest;
 }
 
-/** 找到指定 namespace/pod 下所有容器日志文件的当前路径(k8s重启后uid/文件名会变化, 每次都重新扫描) */
-function findPodLogFiles(namespace: string, podNamePrefix: string): Array<{ filePath: string; podName: string; container: string }> {
-  if (!fs.existsSync(PODS_LOG_ROOT)) return [];
-  const dirs = fs.readdirSync(PODS_LOG_ROOT).filter((d) => d.startsWith(`${namespace}_${podNamePrefix}`));
+/** 找到指定 namespace/pod 下所有容器日志文件的当前路径(k8s重启后uid/文件名会变化, 每次都重新扫描)。
+ *  podNamePrefix 留空表示匹配该 namespace 下全部 Pod。 */
+export function findPodLogFiles(namespace: string, podNamePrefix: string): Array<{ filePath: string; podName: string; container: string }> {
+  const root = podsLogRoot();
+  if (!fs.existsSync(root)) return [];
+  const dirPrefix = podNamePrefix ? `${namespace}_${podNamePrefix}` : `${namespace}_`;
+  const dirs = fs.readdirSync(root).filter((d) => d.startsWith(dirPrefix));
   const files: Array<{ filePath: string; podName: string; container: string }> = [];
   for (const dir of dirs) {
-    const full = path.join(PODS_LOG_ROOT, dir);
+    const full = path.join(root, dir);
     const podName = extractPodName(dir, namespace);
     let containerDirs: string[] = [];
     try {
@@ -205,60 +269,91 @@ const shipperStates = new Map<string, ShipperState>();
  * 每次调用只处理自上次以来新增的字节(基于文件路径+offset), 幂等安全。
  */
 export async function shipOnce(target: ShipTarget): Promise<{ target: ShipTarget; shipped: number }> {
-  const files = findPodLogFiles(target.namespace, target.podNamePrefix);
-  const bulkBody: unknown[] = [];
-  let shipped = 0;
+  const key = targetKey(target);
+  const status = ensureShipStatus(key, target);
+  const now = () => new Date().toISOString();
+  status.lastScannedAt = now();
 
-  for (const { filePath, podName, container } of files) {
-    let stat: fs.Stats;
-    try {
-      stat = fs.statSync(filePath);
-    } catch {
-      continue;
-    }
-    const state = shipperStates.get(filePath) ?? { filePath, offset: 0 };
-    if (stat.size < state.offset) {
-      // 文件被截断/轮转, 从头重读
-      state.offset = 0;
-    }
-    if (stat.size === state.offset) {
-      continue; // 无新增内容
-    }
+  try {
+    const files = findPodLogFiles(target.namespace, target.podNamePrefix);
+    status.fileCount = files.length;
 
-    const fd = fs.openSync(filePath, "r");
-    const buf = Buffer.alloc(stat.size - state.offset);
-    fs.readSync(fd, buf, 0, buf.length, state.offset);
-    fs.closeSync(fd);
-    state.offset = stat.size;
-    shipperStates.set(filePath, state);
-
-    const lines = buf.toString("utf8").split("\n").filter(Boolean);
-    for (const line of lines) {
-      const parsed = parseLogLine(line);
-      if (!parsed) continue;
-      let doc: Record<string, unknown>;
-      try {
-        doc = JSON.parse(parsed.content);
-      } catch {
-        // 非 JSON 行(如启动banner等), 仍以纯文本形式索引, 保证不丢日志
-        doc = { message: parsed.content, level: "INFO" };
+    if (files.length === 0) {
+      status.warning = "匹配到 0 个日志文件,请检查 namespace/podNamePrefix 是否与该节点上的 Pod 一致";
+      if (!warnedZeroFiles.has(key)) {
+        console.warn(
+          `[logShipper] 采集目标 ${target.namespace}/${target.podNamePrefix || "(全部 Pod)"} 匹配到 0 个日志文件,请检查 namespace/pod 前缀配置`
+        );
+        warnedZeroFiles.add(key);
       }
-      doc["@timestamp"] = doc["@timestamp"] ?? parsed.time;
-      doc.pod_name = podName;
-      doc.namespace = target.namespace;
-      doc.container = container;
-      doc.stream = parsed.stream;
-
-      bulkBody.push({ index: { _index: todayIndex(target.indexPrefix) } });
-      bulkBody.push(doc);
-      shipped += 1;
+      return { target, shipped: 0 };
     }
-  }
+    warnedZeroFiles.delete(key);
+    status.warning = undefined;
 
-  if (bulkBody.length > 0) {
-    await osClient.bulk({ body: bulkBody as Record<string, unknown>[] });
+    const bulkBody: unknown[] = [];
+    let shipped = 0;
+
+    for (const { filePath, podName, container } of files) {
+      let stat: fs.Stats;
+      try {
+        stat = fs.statSync(filePath);
+      } catch {
+        continue;
+      }
+      const state = shipperStates.get(filePath) ?? { filePath, offset: 0 };
+      if (stat.size < state.offset) {
+        // 文件被截断/轮转, 从头重读
+        state.offset = 0;
+      }
+      if (stat.size === state.offset) {
+        continue; // 无新增内容
+      }
+
+      const fd = fs.openSync(filePath, "r");
+      const buf = Buffer.alloc(stat.size - state.offset);
+      fs.readSync(fd, buf, 0, buf.length, state.offset);
+      fs.closeSync(fd);
+      state.offset = stat.size;
+      shipperStates.set(filePath, state);
+
+      const lines = buf.toString("utf8").split("\n").filter(Boolean);
+      for (const line of lines) {
+        const parsed = parseLogLine(line);
+        if (!parsed) continue;
+        let doc: Record<string, unknown>;
+        try {
+          doc = JSON.parse(parsed.content);
+        } catch {
+          // 非 JSON 行(如启动banner等), 仍以纯文本形式索引, 保证不丢日志
+          doc = { message: parsed.content, level: "INFO" };
+        }
+        doc["@timestamp"] = doc["@timestamp"] ?? parsed.time;
+        doc.pod_name = podName;
+        doc.namespace = target.namespace;
+        doc.container = container;
+        doc.stream = parsed.stream;
+
+        bulkBody.push({ index: { _index: todayIndex(target.indexPrefix) } });
+        bulkBody.push(doc);
+        shipped += 1;
+      }
+    }
+
+    if (bulkBody.length > 0) {
+      await osClient.bulk({ body: bulkBody as Record<string, unknown>[] });
+      status.lastShippedAt = now();
+      status.lastShippedCount = shipped;
+      status.totalShipped += shipped;
+    }
+    status.lastError = undefined;
+    status.lastErrorAt = undefined;
+    return { target, shipped };
+  } catch (err: any) {
+    status.lastError = err?.message ?? String(err);
+    status.lastErrorAt = now();
+    throw err;
   }
-  return { target, shipped };
 }
 
 /** 顺序采集所有目标,避免并发导致 shipperStates 读写冲突 */
@@ -280,14 +375,19 @@ let shipperTimer: NodeJS.Timeout | undefined;
 
 export function startLogShipper(intervalMs = 2000): void {
   if (shipperTimer) return;
-  console.log(`[logShipper] 已配置 ${SHIP_TARGETS.length} 个采集目标:`);
-  for (const t of SHIP_TARGETS) {
-    console.log(`  - namespace=${t.namespace}, podPrefix=${t.podNamePrefix}, indexPrefix=${t.indexPrefix}`);
-  }
+  reloadShipTargets();
+  const logTargets = () => {
+    console.log(`[logShipper] 已配置 ${SHIP_TARGETS.length} 个采集目标:`);
+    for (const t of SHIP_TARGETS) {
+      console.log(`  - namespace=${t.namespace}, podPrefix=${t.podNamePrefix}, indexPrefix=${t.indexPrefix}`);
+    }
+  };
+  logTargets();
   for (const t of SHIP_TARGETS) {
     ensureIndexTemplate(t.indexPrefix).catch((e) => console.warn(`[logShipper] index template ${t.indexPrefix} init 失败:`, e?.message ?? e));
   }
   shipperTimer = setInterval(() => {
+    reloadShipTargets();
     shipAllTargets().catch((e) => console.warn("[logShipper] 采集失败:", e?.message ?? e));
   }, intervalMs);
 }

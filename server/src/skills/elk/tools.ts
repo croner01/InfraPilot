@@ -115,6 +115,8 @@ export const elkTools: ToolDef[] = [
 
 async function searchRecords(query: unknown, size: number, options?: SearchOptions): Promise<LogRecord[]> {
   const index = buildIndexPattern(options);
+  // 显式 namespace/index 未映射到任何采集索引时直接返回空,避免对空索引发起无效查询
+  if (!index) return [];
   try {
     const res: any = await osClient.search({
       index,
@@ -157,6 +159,13 @@ export async function executeElkTool(tool: string, args: Record<string, unknown>
         const { field, namespace, index_prefix } = args as { field?: string; namespace?: string; index_prefix?: string };
         const searchOpts: SearchOptions = { namespace, index_prefix };
         const index = buildIndexPattern(searchOpts);
+        if (!index) {
+          return {
+            success: true,
+            data: { field, counts: {}, total: 0, index_pattern: "" },
+            durationMs: Date.now() - start,
+          };
+        }
         const res: any = await osClient.search({
           index,
           body: {
@@ -178,6 +187,13 @@ export async function executeElkTool(tool: string, args: Record<string, unknown>
       case "get_error_timeline": {
         const { namespace, index_prefix } = args as { namespace?: string; index_prefix?: string };
         const searchOpts: SearchOptions = { namespace, index_prefix };
+        if (!buildIndexPattern(searchOpts)) {
+          return {
+            success: true,
+            data: { timeline: [], index_pattern: "" },
+            durationMs: Date.now() - start,
+          };
+        }
         const must: unknown[] = [{ terms: { "level.keyword": ["WARN", "ERROR"] } }];
         addNamespaceFilter(must, namespace);
         const records = await searchRecords({ bool: { must } }, 200, searchOpts);
@@ -193,6 +209,13 @@ export async function executeElkTool(tool: string, args: Record<string, unknown>
       case "cluster_similar_errors": {
         const { namespace, index_prefix } = args as { namespace?: string; index_prefix?: string };
         const searchOpts: SearchOptions = { namespace, index_prefix };
+        if (!buildIndexPattern(searchOpts)) {
+          return {
+            success: true,
+            data: { clusters: [], total_problematic_logs: 0, index_pattern: "" },
+            durationMs: Date.now() - start,
+          };
+        }
         const must: unknown[] = [{ terms: { "level.keyword": ["WARN", "ERROR"] } }];
         addNamespaceFilter(must, namespace);
         const problematic = await searchRecords({ bool: { must } }, 500, searchOpts);

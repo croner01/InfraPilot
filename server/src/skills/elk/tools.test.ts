@@ -11,7 +11,7 @@ vi.mock("./logShipper.js", () => {
     let matched = targets;
     if (namespace) {
       matched = targets.filter((t) => t.namespace === namespace);
-      if (matched.length === 0) matched = targets;
+      if (matched.length === 0) return ""; // 显式 namespace 无映射时不再静默回退
     }
     const patterns = Array.from(new Set(matched.map((t) => `${t.indexPrefix}-*`)));
     if (patterns.length === 0) return "order-api-logs-*";
@@ -60,11 +60,11 @@ describe("resolveIndexPattern", () => {
     expect(resolveIndexPattern({ namespace: "order-service", index_prefix: "custom-logs" })).toBe("custom-logs-*");
   });
 
-  it("falls back to all patterns when namespace not found", () => {
+  it("returns empty pattern when namespace not found", () => {
     SHIP_TARGETS.push(
       { namespace: "order-service", podNamePrefix: "order-api", indexPrefix: "order-api-logs" }
     );
-    expect(resolveIndexPattern({ namespace: "unknown" })).toBe("order-api-logs-*");
+    expect(resolveIndexPattern({ namespace: "unknown" })).toBe("");
   });
 
   it("deduplicates index patterns", () => {
@@ -207,5 +207,21 @@ describe("executeElkTool", () => {
     const res = await executeElkTool("search_logs", { namespace: "islap" });
     expect(res.success).toBe(true);
     expect(res.data).toMatchObject({ logs: [] });
+  });
+
+  it("search_logs returns empty without querying when namespace has no mapped index", async () => {
+    const res = await executeElkTool("search_logs", { namespace: "unknown-ns" });
+
+    expect(res.success).toBe(true);
+    expect(res.data).toMatchObject({ logs: [], total_matched: 0, index_pattern: "" });
+    expect(osClient.search).not.toHaveBeenCalled();
+  });
+
+  it("aggregate_by_field returns empty counts without querying when namespace has no mapped index", async () => {
+    const res = await executeElkTool("aggregate_by_field", { field: "level", namespace: "unknown-ns" });
+
+    expect(res.success).toBe(true);
+    expect(res.data).toMatchObject({ field: "level", counts: {}, total: 0, index_pattern: "" });
+    expect(osClient.search).not.toHaveBeenCalled();
   });
 });
