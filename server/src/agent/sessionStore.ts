@@ -9,7 +9,13 @@
 import { EventEmitter } from "node:events";
 import { v4 as uuidv4 } from "uuid";
 import { AgentSession, TimelineEvent, TimelineEventType } from "../types.js";
-import { upsertSession, getSession as dbGetSession, listSessions as dbListSessions, insertTimelineEvent } from "../db/db.js";
+import {
+  upsertSession,
+  getSession as dbGetSession,
+  listSessions as dbListSessions,
+  insertTimelineEvent,
+  deleteSession as dbDeleteSession,
+} from "../db/db.js";
 
 const sessions = new Map<string, AgentSession>();
 export const bus = new EventEmitter();
@@ -66,6 +72,13 @@ export function terminateSession(id: string): AgentSession | undefined {
   session.updatedAt = new Date().toISOString();
   persist(session);
   return session;
+}
+
+/** 硬删除会话：从内存与数据库中移除会话及全部关联数据 */
+export function deleteSession(id: string): boolean {
+  const removed = dbDeleteSession(id);
+  if (removed) sessions.delete(id);
+  return removed;
 }
 
 export function updateSessionTitle(id: string, title: string): AgentSession | undefined {

@@ -10,7 +10,7 @@ import {
   listSessions,
   resetDemoScenario,
   sendMessage,
-  terminateSession,
+  deleteSession,
   updateSessionTitle,
   decideApproval,
   wsUrl,
@@ -168,9 +168,9 @@ export default function App() {
     }
   };
 
-  const handleTerminate = async (id: string) => {
-    if (!confirm("确定要终止该会话吗？")) return;
-    await terminateSession(id, (err) => notify(err.message));
+  const handleDelete = async (id: string) => {
+    if (!confirm("确定要删除该会话吗？此操作不可恢复，会删除会话、时间线、审批与审计记录。")) return;
+    await deleteSession(id, (err) => notify(err.message));
     await refreshSessions();
     if (currentId === id) setCurrentId(null);
   };
@@ -219,14 +219,14 @@ export default function App() {
           currentView={currentView}
           onViewChange={setCurrentView}
           onSelect={handleSelect}
-          onTerminate={handleTerminate}
+          onDelete={handleDelete}
           onTitleSave={handleTitleSave}
         />
         <main className="main">
           {currentView === "sessions" && (
             currentSession ? (
               <>
-                <SessionHeader session={currentSession} onTitleSave={handleTitleSave} onTerminate={handleTerminate} />
+                <SessionHeader session={currentSession} onTitleSave={handleTitleSave} onDelete={handleDelete} />
                 <div className="main__tabs">
                   {[
                     { key: "timeline", label: "时间线" },
@@ -328,7 +328,7 @@ function Sidebar({
   currentView,
   onViewChange,
   onSelect,
-  onTerminate,
+  onDelete,
   onTitleSave,
 }: {
   search: string;
@@ -339,7 +339,7 @@ function Sidebar({
   currentView: View;
   onViewChange: (v: View) => void;
   onSelect: (id: string) => void;
-  onTerminate: (id: string) => void;
+  onDelete: (id: string) => void;
   onTitleSave: (id: string, title: string) => void;
 }) {
   const navItems: { key: View; label: string; icon: string }[] = [
@@ -392,7 +392,7 @@ function Sidebar({
                   session={s}
                   active={s.id === currentId}
                   onSelect={() => onSelect(s.id)}
-                  onTerminate={() => onTerminate(s.id)}
+                  onDelete={() => onDelete(s.id)}
                   onTitleSave={(title) => onTitleSave(s.id, title)}
                 />
               ))}
@@ -405,7 +405,7 @@ function Sidebar({
                   session={s}
                   active={s.id === currentId}
                   onSelect={() => onSelect(s.id)}
-                  onTerminate={() => onTerminate(s.id)}
+                  onDelete={() => onDelete(s.id)}
                   onTitleSave={(title) => onTitleSave(s.id, title)}
                 />
               ))}
@@ -421,13 +421,13 @@ function SessionItem({
   session,
   active,
   onSelect,
-  onTerminate,
+  onDelete,
   onTitleSave,
 }: {
   session: AgentSession;
   active: boolean;
   onSelect: () => void;
-  onTerminate: () => void;
+  onDelete: () => void;
   onTitleSave: (title: string) => void;
 }) {
   const [editing, setEditing] = useState(false);
@@ -461,10 +461,10 @@ function SessionItem({
         )}
         <button
           className="session-item__close"
-          title="终止会话"
+          title="删除会话"
           onClick={(e) => {
             e.stopPropagation();
-            onTerminate();
+            onDelete();
           }}
         >
           ✕
@@ -481,11 +481,11 @@ function SessionItem({
 function SessionHeader({
   session,
   onTitleSave,
-  onTerminate,
+  onDelete,
 }: {
   session: AgentSession;
   onTitleSave: (id: string, title: string) => void;
-  onTerminate: (id: string) => void;
+  onDelete: (id: string) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(session.title);
@@ -534,8 +534,8 @@ function SessionHeader({
         </div>
       </div>
       <div className="session-header__actions">
-        <button className="btn btn--danger" onClick={() => onTerminate(session.id)}>
-          终止会话
+        <button className="btn btn--danger" onClick={() => onDelete(session.id)}>
+          删除会话
         </button>
       </div>
     </div>

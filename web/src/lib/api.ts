@@ -46,8 +46,8 @@ export function createSession(title: string, onError?: OnError) {
   return request<AgentSession>("/sessions", { method: "POST", body: JSON.stringify({ title }) }, onError);
 }
 
-export function terminateSession(id: string, onError?: OnError) {
-  return request<{ ok: boolean; session: AgentSession }>(`/sessions/${id}`, { method: "DELETE" }, onError);
+export function deleteSession(id: string, onError?: OnError) {
+  return request<{ ok: boolean }>(`/sessions/${id}`, { method: "DELETE" }, onError);
 }
 
 export function updateSessionTitle(id: string, title: string, onError?: OnError) {

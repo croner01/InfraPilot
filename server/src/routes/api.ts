@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { createSession, emitEvent, getSession, listSessionSummaries, terminateSession, updateSessionTitle } from "../agent/sessionStore.js";
+import { createSession, emitEvent, getSession, listSessionSummaries, deleteSession, updateSessionTitle } from "../agent/sessionStore.js";
 import { startAgentTurn, resumeAgentTurn } from "../agent/orchestrator.js";
 import { getRealPodState, resetRealDemoScenario } from "../demo/realPodState.js";
 import { isAbnormalPod, listPods, readPod, listEventsForPod, type NormalizedPod } from "../skills/k8s/client.js";
@@ -62,10 +62,9 @@ apiRouter.patch("/sessions/:id", (req, res) => {
 });
 
 apiRouter.delete("/sessions/:id", (req, res) => {
-  const session = terminateSession(req.params.id);
-  if (!session) return res.status(404).json({ error: "session not found" });
-  extractAndStoreSessionMemory(req.params.id).catch(() => {});
-  res.json({ ok: true, session });
+  const removed = deleteSession(req.params.id);
+  if (!removed) return res.status(404).json({ error: "session not found" });
+  res.json({ ok: true });
 });
 
 apiRouter.post("/sessions/:id/messages", async (req, res) => {

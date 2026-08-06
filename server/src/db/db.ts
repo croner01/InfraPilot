@@ -166,6 +166,25 @@ export function upsertSession(id: string, title: string, status: string, stateJs
   }
 }
 
+/**
+ * 硬删除会话及其全部关联数据（时间线事件、审批、审计、checkpoint、跨会话记忆）。
+ * 返回是否存在该会话；知识库案例(incident_cases)作为沉淀资产保留。
+ */
+export function deleteSession(id: string): boolean {
+  const existing = db.prepare(`SELECT id FROM sessions WHERE id = ?`).get(id);
+  if (!existing) return false;
+  const remove = db.transaction(() => {
+    db.prepare(`DELETE FROM sessions WHERE id = ?`).run(id);
+    db.prepare(`DELETE FROM timeline_events WHERE session_id = ?`).run(id);
+    db.prepare(`DELETE FROM session_checkpoints WHERE session_id = ?`).run(id);
+    db.prepare(`DELETE FROM approvals WHERE session_id = ?`).run(id);
+    db.prepare(`DELETE FROM audit_log WHERE session_id = ?`).run(id);
+    db.prepare(`DELETE FROM session_memories WHERE session_id = ?`).run(id);
+  });
+  remove();
+  return true;
+}
+
 export function getSession(id: string): { state_json: string } | undefined {
   return db.prepare(`SELECT state_json FROM sessions WHERE id = ?`).get(id) as any;
 }
