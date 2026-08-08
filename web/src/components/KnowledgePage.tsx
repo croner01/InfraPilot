@@ -7,6 +7,7 @@ export function KnowledgePage({ notify }: { notify: (msg: string, type?: "error"
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
+  const [selected, setSelected] = useState<KnowledgeCase | null>(null);
   const [form, setForm] = useState<Partial<KnowledgeCase>>({
     severity: "p2",
     problemType: "",
@@ -27,6 +28,14 @@ export function KnowledgePage({ notify }: { notify: (msg: string, type?: "error"
 
   useEffect(() => {
     load();
+  }, []);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setSelected(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
   }, []);
 
   const handleSearch = async () => {
@@ -160,7 +169,19 @@ export function KnowledgePage({ notify }: { notify: (msg: string, type?: "error"
         <div className="knowledge-list">
           {cases.length === 0 && <div className="empty-state"><div className="empty-state__icon">📚</div><div className="empty-state__message">暂无知识库案例</div></div>}
           {cases.map((c) => (
-            <div key={c.id} className="knowledge-card card">
+            <div
+              key={c.id}
+              className="knowledge-card card"
+              onClick={() => setSelected(c)}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  setSelected(c);
+                }
+              }}
+            >
               <div className="knowledge-card__header">
                 <span className="knowledge-card__title">{c.title}</span>
                 <span className={`risk-badge risk-badge--${c.severity}`}>{c.severity}</span>
@@ -186,11 +207,62 @@ export function KnowledgePage({ notify }: { notify: (msg: string, type?: "error"
                   {c.tags.map((t) => <span key={t} className="tag">{t}</span>)}
                 </div>
               )}
+              <div className="knowledge-card__footer">
+                <button
+                  className="btn btn--sm btn--secondary"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelected(c);
+                  }}
+                >
+                  查看详情
+                </button>
+              </div>
             </div>
           ))}
         </div>
       )}
       </div>
+
+      {selected && (
+        <div className="knowledge-modal-backdrop" onClick={() => setSelected(null)}>
+          <div className="knowledge-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+            <div className="knowledge-modal__header">
+              <h3>{selected.title}</h3>
+              <button className="btn btn--sm btn--ghost" onClick={() => setSelected(null)}>✕</button>
+            </div>
+            <div className="knowledge-modal__meta">
+              <span className={`risk-badge risk-badge--${selected.severity}`}>{selected.severity}</span>
+              {selected.problemType && <span>{selected.problemType}</span>}
+              {selected.serviceName && <span>关联服务：{selected.serviceName}</span>}
+              <span>{new Date(selected.createdAt).toLocaleString()}</span>
+              {selected.sourceSessionId && <span className="knowledge-modal__session">来源会话：{selected.sourceSessionId}</span>}
+            </div>
+            <div className="knowledge-modal__body">
+              <section className="knowledge-modal__section">
+                <h4>问题摘要</h4>
+                <p>{selected.summary}</p>
+              </section>
+              <section className="knowledge-modal__section">
+                <h4>根因（{selected.rootCauses.length}）</h4>
+                <ul>{selected.rootCauses.map((r, i) => <li key={i}>{r}</li>)}</ul>
+              </section>
+              <section className="knowledge-modal__section">
+                <h4>解决方案（{selected.solutions.length}）</h4>
+                <ul>{selected.solutions.map((s, i) => <li key={i}>{s}</li>)}</ul>
+              </section>
+              {selected.tags && selected.tags.length > 0 && (
+                <section className="knowledge-modal__section">
+                  <h4>标签</h4>
+                  <div className="knowledge-card__tags">
+                    {selected.tags.map((t) => <span key={t} className="tag">{t}</span>)}
+                  </div>
+                </section>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -1938,6 +1938,10 @@ body {
    ============================================================================ */
 
 .knowledge-page {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
   padding: 0 0 24px;
 }
 
@@ -2004,11 +2008,17 @@ body {
   padding: 20px;
   box-shadow: var(--shadow-sm);
   transition: all 0.2s ease;
+  cursor: pointer;
 }
 
 .knowledge-card:hover {
   box-shadow: var(--shadow-md);
   transform: translateY(-2px);
+}
+
+.knowledge-card:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
 }
 
 .knowledge-card__header {
@@ -2062,6 +2072,134 @@ body {
   margin-top: 12px;
 }
 
+.knowledge-card__footer {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--divider);
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* ---- 知识库详情弹窗 ---- */
+
+.knowledge-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(17, 24, 39, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  z-index: 1000;
+  animation: fade-in 0.15s ease both;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.knowledge-modal {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  width: min(720px, 100%);
+  max-height: 82vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: modal-pop 0.18s ease both;
+}
+
+@keyframes modal-pop {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.knowledge-modal__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px 20px 12px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.knowledge-modal__header h3 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.5;
+  color: var(--text-primary);
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.knowledge-modal__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 20px;
+  font-size: 12px;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-hover);
+}
+
+.knowledge-modal__session {
+  font-family: var(--font-mono);
+  word-break: break-all;
+}
+
+.knowledge-modal__body {
+  padding: 18px 20px 22px;
+  overflow-y: auto;
+}
+
+.knowledge-modal__section {
+  margin-bottom: 18px;
+}
+
+.knowledge-modal__section:last-child {
+  margin-bottom: 0;
+}
+
+.knowledge-modal__section h4 {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.knowledge-modal__section p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.knowledge-modal__section ul {
+  margin: 0;
+  padding-left: 20px;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--text-secondary);
+  word-break: break-word;
+}
+
 /* ============================================================================
    Topology & Settings Pages
    ============================================================================ */
@@ -2113,6 +2251,13 @@ body {
   padding: 2px 6px;
   border-radius: 4px;
   font-family: var(--font-mono);
+}
+
+.topology-page {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .settings-page {
