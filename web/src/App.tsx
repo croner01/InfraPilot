@@ -471,6 +471,9 @@ function SessionItem({
         </button>
       </div>
       <div className="session-item__meta">
+        <span className="session-item__id" title={session.id}>
+          {session.id.slice(0, 8)}
+        </span>
         <span className={classNames("status-badge", statusClass[session.status])}>{statusText[session.status] ?? session.status}</span>
         <span className="session-item__time">{formatTime(session.updatedAt)}</span>
       </div>
@@ -489,6 +492,14 @@ function SessionHeader({
 }) {
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(session.title);
+  const [copied, setCopied] = useState(false);
+
+  const copyId = () => {
+    navigator.clipboard?.writeText(session.id).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    }).catch(() => {});
+  };
 
   return (
     <div className="session-header">
@@ -518,6 +529,13 @@ function SessionHeader({
         <p className="session-header__desc">
           {session.incidentSummary || "暂无故障摘要，请在下方输入现象开始诊断。"}
         </p>
+        <div className="session-header__id">
+          <span className="session-header__id-label">会话 ID</span>
+          <code className="session-header__id-value">{session.id}</code>
+          <button className="btn btn--sm" onClick={copyId}>
+            {copied ? "已复制" : "复制"}
+          </button>
+        </div>
       </div>
       <div className="session-header__stats">
         <div className="stat-card">
