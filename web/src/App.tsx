@@ -116,7 +116,7 @@ export default function App() {
       try {
         const data = JSON.parse(ev.data) as TimelineEvent;
         setEvents((prev) => [...prev, data]);
-        if (["status", "done", "error", "rca_conclusion", "approval_request"].includes(data.type)) {
+        if (["status", "done", "error", "rca_conclusion", "approval_request", "plan_update", "remediation_plan"].includes(data.type)) {
           refreshSessions();
         }
       } catch {
