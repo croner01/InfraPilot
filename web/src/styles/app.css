@@ -437,7 +437,6 @@ body {
   padding: 0 28px 12px;
   flex-shrink: 0;
   border-bottom: 1px solid var(--border-color);
-  margin: 0 28px;
 }
 
 .main__tab {
@@ -685,9 +684,50 @@ body {
   padding: 12px;
   font-family: var(--font-mono);
   font-size: 12px;
-  overflow-x: auto;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  overflow-y: auto;
+  max-height: 420px;
   color: var(--text-secondary);
   margin-top: 8px;
+}
+
+.timeline-item__list {
+  margin: 8px 0 0;
+  padding-left: 20px;
+}
+
+.timeline-item__list li {
+  margin-bottom: 4px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.timeline-item__code {
+  background: #f9fafb;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  overflow-y: auto;
+  max-height: 420px;
+  margin: 8px 0 0;
+  color: var(--text-secondary);
+}
+
+.timeline-item__code--compact {
+  max-height: 260px;
+  margin-top: 6px;
 }
 
 .timeline-item__diff {
@@ -2726,6 +2766,9 @@ body {
   font-size: 14px;
   line-height: 1.7;
   box-shadow: var(--shadow-sm);
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  min-width: 0;
 }
 
 .message--user .message__bubble {
@@ -2738,6 +2781,353 @@ body {
   font-size: 11px;
   color: var(--text-muted);
   margin-top: 4px;
+}
+
+.message__bubble code {
+  font-family: var(--font-mono);
+  font-size: 0.88em;
+  background: rgba(124, 58, 237, 0.08);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  padding: 1px 5px;
+  word-break: break-all;
+}
+
+.message--user .message__bubble code {
+  background: rgba(255, 255, 255, 0.16);
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+.message__bubble pre {
+  background: #f9fafb;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  overflow-y: auto;
+  max-height: 420px;
+  margin: 8px 0 0;
+}
+
+.message--user .message__bubble pre {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
+/* ============================================================================
+   Session Detail Tabs（证据链 / 诊断计划 / 修复方案 / 审计日志）
+   ============================================================================ */
+
+.detail-tabs__nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.detail-tabs__tab {
+  padding: 7px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.detail-tabs__tab:hover {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+}
+
+.detail-tabs__tab.active {
+  background: var(--accent-primary-light);
+  color: var(--accent-primary);
+  font-weight: 600;
+  border-color: transparent;
+}
+
+.detail-tabs__count {
+  margin-left: 6px;
+  font-size: 11px;
+  background: rgba(124, 58, 237, 0.12);
+  color: var(--accent-primary);
+  padding: 1px 7px;
+  border-radius: 999px;
+}
+
+.detail-tabs__body {
+  min-width: 0;
+}
+
+/* ---- 证据链 ---- */
+
+.evidence-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.evidence-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+  box-shadow: var(--shadow-sm);
+}
+
+.evidence-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.evidence-card__type {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent-primary);
+  word-break: break-all;
+}
+
+.evidence-card__confidence {
+  font-size: 12px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.evidence-card__summary {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.evidence-card__content {
+  background: #f9fafb;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  overflow-y: auto;
+  max-height: 360px;
+  margin: 10px 0 0;
+  color: var(--text-secondary);
+}
+
+.evidence-card__time {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 10px;
+}
+
+/* ---- 诊断计划 ---- */
+
+.plan-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.plan-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+}
+
+.plan-item__idx {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--accent-primary-light);
+  color: var(--accent-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.plan-item__text {
+  font-size: 14px;
+  line-height: 1.65;
+  color: var(--text-primary);
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+/* ---- 修复方案 ---- */
+
+.remediation-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.remediation-summary {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.remediation-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.remediation-step {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+}
+
+.remediation-step__header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.remediation-step__idx {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--accent-success-light);
+  color: var(--accent-success);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.remediation-step__title {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.6;
+  color: var(--text-primary);
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.remediation-step__tool {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--accent-info);
+  background: var(--accent-info-light);
+  border-radius: 6px;
+  padding: 4px 8px;
+  margin-bottom: 8px;
+  word-break: break-all;
+}
+
+.remediation-step__args {
+  background: #f9fafb;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  overflow-y: auto;
+  max-height: 320px;
+  margin: 8px 0 0;
+  color: var(--text-secondary);
+}
+
+.remediation-step__rollback {
+  font-size: 12px;
+  color: var(--accent-warning);
+  margin-top: 10px;
+  word-break: break-word;
+}
+
+/* ---- 审计日志 ---- */
+
+.audit-table-wrapper {
+  overflow-x: auto;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--bg-card);
+}
+
+.audit-table {
+  width: 100%;
+  min-width: 720px;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.audit-table th,
+.audit-table td {
+  padding: 10px 14px;
+  text-align: left;
+  border-bottom: 1px solid var(--border-color);
+  vertical-align: top;
+  word-break: break-word;
+}
+
+.audit-table th {
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+  font-weight: 600;
+  position: sticky;
+  top: 0;
+}
+
+.audit-table tr:last-child td {
+  border-bottom: none;
+}
+
+/* ---- 空状态 ---- */
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 48px 20px;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.empty-state__icon {
+  font-size: 32px;
+}
+
+.empty-state__message {
+  font-size: 13px;
 }
 
 .chat-empty {
