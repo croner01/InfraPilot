@@ -68,10 +68,12 @@ describe("deleteSession", () => {
     expect(deleteSession(id)).toBe(true);
 
     expect(getSession(id)).toBeUndefined();
-    expect(db.prepare("SELECT COUNT(*) n FROM timeline_events WHERE session_id = ?").get(id).n).toBe(0);
-    expect(db.prepare("SELECT COUNT(*) n FROM approvals WHERE session_id = ?").get(id).n).toBe(0);
-    expect(db.prepare("SELECT COUNT(*) n FROM audit_log WHERE session_id = ?").get(id).n).toBe(0);
-    expect(db.prepare("SELECT COUNT(*) n FROM session_checkpoints WHERE session_id = ?").get(id).n).toBe(0);
+    const count = (table: string) =>
+      (db.prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE session_id = ?`).get(id) as { n: number }).n;
+    expect(count("timeline_events")).toBe(0);
+    expect(count("approvals")).toBe(0);
+    expect(count("audit_log")).toBe(0);
+    expect(count("session_checkpoints")).toBe(0);
   });
 
   it("returns false when the session does not exist", () => {

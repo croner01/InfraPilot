@@ -18,7 +18,7 @@ import { executeToolCall } from "../gateway/commandGateway.js";
 import { computeArgsHash } from "../gateway/argsHash.js";
 import { emitEvent, getSession, updateSession } from "./sessionStore.js";
 import { insertApproval, decideApproval as dbDecideApproval, getApproval } from "../db/db.js";
-import { saveCheckpoint, loadCheckpoint, deleteCheckpoint } from "./checkpoint.js";
+import { saveCheckpoint, loadCheckpoint } from "./checkpoint.js";
 import { buildMemoryContext, extractAndStoreSessionMemory } from "./memoryStore.js";
 import { extractPlan, extractRemediation } from "./plan.js";
 import {
@@ -126,7 +126,13 @@ async function buildInitialHistory(sessionId: string, userMessage: string): Prom
 
   const similarCases = await fetchSimilarCases(recallQuery);
   const memoryContext = await buildMemoryContext(recallQuery);
-  const systemPrompt = buildSystemPrompt(buildToolListMarkdown(availableTools) + similarCases + memoryContext);
+  // P2: 即使 checkpoint 丢失（如历史被清、异常重启），也把会话已有状态注入上下文，避免彻底失忆
+  const recoveredContext = buildRecoveredContext(session);
+  const systemPrompt =
+    buildSystemPrompt(buildToolListMarkdown(availableTools) + similarCases + memoryContext) +
+    (recoveredContext
+      ? `\n\n# 会话历史上下文(自动恢复)\n${recoveredContext}\n以上为历史会话已确认的状态与证据，仅作上下文参考，结论仍需结合实时证据交叉验证。`
+      : "");
 
   updateSession(sessionId, (s) => {
     s.status = "planning";
@@ -138,6 +144,27 @@ async function buildInitialHistory(sessionId: string, userMessage: string): Prom
     { role: "system", content: systemPrompt },
     { role: "user", content: userMessage },
   ];
+}
+
+/** P2: 从 session 状态中恢复一段历史上下文摘要，供 checkpoint 丢失后兜底 */
+function buildRecoveredContext(session: AgentSession): string {
+  const parts: string[] = [];
+  if (session.incidentSummary) parts.push(`- 原始问题: ${session.incidentSummary}`);
+  if (session.plan && session.plan.length > 0) parts.push(`- 诊断计划: ${session.plan.join(" -> ")}`);
+  if (session.evidence && session.evidence.length > 0) {
+    const recent = session.evidence
+      .slice(-5)
+      .map((e) => `  - ${e.sourceSkill ?? e.type}: ${e.summary}`)
+      .join("\n");
+    parts.push(`- 已收集证据(最近 ${Math.min(5, session.evidence.length)} 条):\n${recent}`);
+  }
+  if (session.executedToolCalls && session.executedToolCalls.length > 0) {
+    const tools = Array.from(new Set(session.executedToolCalls.map((t) => `${t.skill}.${t.tool}`))).join(", ");
+    parts.push(`- 已执行工具(${session.executedToolCalls.length} 次): ${tools}`);
+  }
+  if (session.rootCause) parts.push(`- 已有根因结论: ${session.rootCause.summary}`);
+  if (session.remediation) parts.push(`- 修复方案: ${session.remediation.summary}`);
+  return parts.join("\n");
 }
 
 function formatToolResult(skill: SkillName, tool: string, result: ToolExecutionResult): string {
@@ -200,7 +227,7 @@ export interface RunAgentStepResult {
  * 从 checkpoint 恢复并尽量推进执行循环。
  * - 若 checkpoint 中存在 pendingToolCall，会先执行它（resume 场景）。
  * - 之后循环调用 LLM，处理 tool_calls；遇到第一个需审批的工具时保存 checkpoint 并退出。
- * - 会话结束（无 tool_calls 或达最大迭代次数）时删除 checkpoint。
+ * - 会话结束（无 tool_calls 或达最大迭代次数）时保留 checkpoint，供追问延续上下文。
  */
 export async function runAgentStep(
   sessionId: string,
@@ -230,7 +257,7 @@ export async function runAgentStep(
     emitEvent(sessionId, "checkpoint_saved", { checkpoint });
   }
 
-  const maxIterations = session.maxIterations ?? 10;
+  const maxIterations = session.maxIterations ?? 20;
 
   while (checkpoint.iteration < maxIterations) {
     checkpoint.iteration += 1;
@@ -252,39 +279,7 @@ export async function runAgentStep(
     checkpoint.history.push(msg as ChatMsg);
 
     if (msg.content) {
-      emitEvent(sessionId, "assistant_message", { content: msg.content });
-
-      // 结构化输出：诊断计划 / 修复方案
-      const plan = extractPlan(msg.content);
-      if (plan.length > 0) {
-        updateSession(sessionId, (s) => {
-          s.plan = plan;
-        });
-        emitEvent(sessionId, "plan_update", { plan });
-      }
-
-      const remediation = extractRemediation(msg.content);
-      if (remediation) {
-        updateSession(sessionId, (s) => {
-          s.remediation = remediation;
-        });
-        emitEvent(sessionId, "remediation_plan", { summary: remediation.summary, steps: remediation.steps });
-      }
-
-      const rcaMatch = msg.content.match(/【根因分析结论】([\s\S]*)/);
-      if (rcaMatch) {
-        updateSession(sessionId, (s) => {
-          s.status = "concluded";
-          s.rootCause = {
-            summary: rcaMatch[1].trim(),
-            confidence: extractConfidence(rcaMatch[1]),
-            evidenceChain: s.evidence.map((e) => ({ evidenceId: e.id, role: "supporting" as const })),
-            alternativeHypotheses: [],
-          };
-        });
-        emitEvent(sessionId, "rca_conclusion", { content: rcaMatch[1].trim() });
-        await persistRootCauseAsCase(sessionId, session, rcaMatch[1].trim());
-      }
+      await processAssistantContent(sessionId, session, msg.content);
     }
 
     const toolCalls = msg.tool_calls ?? [];
@@ -371,11 +366,80 @@ export async function runAgentStep(
     }
   }
 
-  emitEvent(sessionId, "status", { status: "max_iterations_reached", message: "已达最大迭代次数,请查看当前证据或补充说明" });
+  // P1: 已达迭代上限时，基于现有证据生成尽力而为的最终结论（禁止再调用工具）
+  await concludeFromExistingEvidence(sessionId, session, checkpoint);
+
+  emitEvent(sessionId, "status", { status: "max_iterations_reached", message: "已达最大迭代次数,已基于现有证据生成阶段性结论" });
   emitEvent(sessionId, "done", {});
-  deleteCheckpoint(sessionId);
+  // P0: 保留 checkpoint，保证后续追问能延续完整上下文
+  saveCheckpoint(checkpoint);
   extractAndStoreSessionMemory(sessionId).catch(() => {});
   return { checkpoint, done: true };
+}
+
+/**
+ * 处理一条 assistant 文本：广播消息、提取诊断计划/修复方案、解析根因结论。
+ * 供正常循环与"超限兜底结论"两条路径复用。
+ */
+async function processAssistantContent(sessionId: string, session: AgentSession, content: string): Promise<void> {
+  emitEvent(sessionId, "assistant_message", { content });
+
+  const plan = extractPlan(content);
+  if (plan.length > 0) {
+    updateSession(sessionId, (s) => {
+      s.plan = plan;
+    });
+    emitEvent(sessionId, "plan_update", { plan });
+  }
+
+  const remediation = extractRemediation(content);
+  if (remediation) {
+    updateSession(sessionId, (s) => {
+      s.remediation = remediation;
+    });
+    emitEvent(sessionId, "remediation_plan", { summary: remediation.summary, steps: remediation.steps });
+  }
+
+  const rcaMatch = content.match(/【根因分析结论】([\s\S]*)/);
+  if (rcaMatch) {
+    updateSession(sessionId, (s) => {
+      s.status = "concluded";
+      s.rootCause = {
+        summary: rcaMatch[1].trim(),
+        confidence: extractConfidence(rcaMatch[1]),
+        evidenceChain: s.evidence.map((e) => ({ evidenceId: e.id, role: "supporting" as const })),
+        alternativeHypotheses: [],
+      };
+    });
+    emitEvent(sessionId, "rca_conclusion", { content: rcaMatch[1].trim() });
+    await persistRootCauseAsCase(sessionId, session, rcaMatch[1].trim());
+  }
+}
+
+/** P1: 迭代超限后的兜底结论——只允许基于已有证据总结，禁止调用工具 */
+async function concludeFromExistingEvidence(sessionId: string, session: AgentSession, checkpoint: AgentCheckpoint): Promise<void> {
+  try {
+    const completion = await openai.chat.completions.create({
+      model: getReasoningModel(),
+      messages: [
+        ...checkpoint.history,
+        {
+          role: "user",
+          content:
+            "已达最大迭代次数。请基于以上全部证据直接输出最终结论，以【根因分析结论】开头，包含根因摘要、置信度(0-1)、支撑证据要点和修复建议；禁止调用任何工具。",
+        },
+      ],
+      tools: [],
+      tool_choice: "none",
+    });
+    const content = completion.choices[0]?.message?.content;
+    if (content) {
+      checkpoint.history.push({ role: "assistant", content });
+      await processAssistantContent(sessionId, session, content);
+    }
+  } catch (err: any) {
+    console.error("[runner] 最终结论生成失败:", err?.message ?? String(err));
+  }
 }
 
 async function recallAvailableTools(checkpoint: AgentCheckpoint): Promise<ToolDef[]> {

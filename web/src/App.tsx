@@ -87,7 +87,7 @@ export default function App() {
     const full = await Promise.all(
       rows.map(async (r) => {
         const s = await getSession(r.id);
-        return s || { ...r, plan: [], evidence: [], pendingToolCalls: [], executedToolCalls: [], iteration: 0, maxIterations: 12 };
+        return s || { ...r, plan: [], evidence: [], pendingToolCalls: [], executedToolCalls: [], iteration: 0, maxIterations: 20 };
       })
     );
     setSessions(full as AgentSession[]);

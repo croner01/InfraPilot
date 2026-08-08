@@ -363,4 +363,95 @@ describe("agent runner", () => {
     expect(systemMsg?.content).toContain("相关历史会话记忆");
     expect(systemMsg?.content).toContain("虚拟机创建流程");
   });
+
+  it("retains checkpoint when max iterations are reached", async () => {
+    const sessionId = "s-max-iter";
+    const session = makeSession(sessionId);
+    session.maxIterations = 1;
+    sessions.set(sessionId, session);
+    (classifyRisk as ReturnType<typeof vi.fn>).mockReturnValue(readonlyRisk());
+    (executeToolCall as ReturnType<typeof vi.fn>).mockResolvedValue({ success: true, data: "cpu 10%", durationMs: 10 });
+    (openai.chat.completions.create as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      choices: [
+        {
+          message: {
+            role: "assistant",
+            content: null,
+            tool_calls: [
+              { id: "tc-1", type: "function", function: { name: "linux__get_cpu_usage", arguments: "{}" } },
+            ],
+          },
+        },
+      ],
+    });
+    // 超限后的最终结论调用：返回普通文本即可
+    (openai.chat.completions.create as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      choices: [{ message: { role: "assistant", content: "已达到迭代上限，基于现有证据的阶段性说明。" } }],
+    });
+
+    const cp = await createInitialCheckpoint(sessionId, "排查问题");
+    const { done } = await runAgentStep(sessionId, cp);
+
+    expect(done).toBe(true);
+    expect(loadCheckpoint(sessionId)).toBeDefined();
+    expect(emitEvent).toHaveBeenCalledWith(sessionId, "status", expect.objectContaining({ status: "max_iterations_reached" }));
+  });
+
+  it("generates a best-effort conclusion when max iterations are reached", async () => {
+    const sessionId = "s-max-conclude";
+    const session = makeSession(sessionId);
+    session.maxIterations = 1;
+    sessions.set(sessionId, session);
+    (classifyRisk as ReturnType<typeof vi.fn>).mockReturnValue(readonlyRisk());
+    (executeToolCall as ReturnType<typeof vi.fn>).mockResolvedValue({ success: true, data: "cpu 10%", durationMs: 10 });
+    (openai.chat.completions.create as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      choices: [
+        {
+          message: {
+            role: "assistant",
+            content: null,
+            tool_calls: [
+              { id: "tc-1", type: "function", function: { name: "linux__get_cpu_usage", arguments: "{}" } },
+            ],
+          },
+        },
+      ],
+    });
+    (openai.chat.completions.create as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      choices: [{ message: { role: "assistant", content: "【根因分析结论】内存不足，需要扩容" } }],
+    });
+
+    const cp = await createInitialCheckpoint(sessionId, "排查问题");
+    const { done } = await runAgentStep(sessionId, cp);
+
+    expect(done).toBe(true);
+    expect(session.status).toBe("concluded");
+    expect(session.rootCause?.summary).toContain("内存不足");
+    expect(emitEvent).toHaveBeenCalledWith(sessionId, "rca_conclusion", expect.objectContaining({ content: expect.stringContaining("内存不足") }));
+  });
+
+  it("restores prior session context when creating a fresh checkpoint", async () => {
+    const sessionId = "s-recover";
+    const session = makeSession(sessionId);
+    session.incidentSummary = "ingest-service 被驱逐";
+    session.evidence.push({
+      id: "e1",
+      sourceAgent: "k8s-skill",
+      sourceSkill: "k8s",
+      type: "k8s.describe_pod",
+      content: {},
+      confidence: 0.9,
+      collectedAt: new Date().toISOString(),
+      summary: "lastState=OOMKilled",
+    });
+    session.rootCause = { summary: "内存 limit 过小", confidence: 0.95, evidenceChain: [], alternativeHypotheses: [] };
+    sessions.set(sessionId, session);
+
+    const cp = await createInitialCheckpoint(sessionId, "继续排查");
+
+    const system = cp.history[0].content as string;
+    expect(system).toContain("会话历史上下文");
+    expect(system).toContain("lastState=OOMKilled");
+    expect(system).toContain("内存 limit 过小");
+  });
 });
