@@ -11,20 +11,27 @@ const tabs: { key: DetailTab; label: string; count?: (s: AgentSession) => number
   { key: "audit", label: "审计日志" },
 ];
 
-export function SessionDetailTabs({ session }: { session: AgentSession }) {
-  const [active, setActive] = useState<DetailTab>("evidence");
+export function SessionDetailTabs({
+  session,
+  tab,
+  onTabChange,
+}: {
+  session: AgentSession;
+  tab: DetailTab;
+  onTabChange: (t: DetailTab) => void;
+}) {
   const [audit, setAudit] = useState<any[] | null>(null);
   const [auditLoading, setAuditLoading] = useState(false);
 
   useEffect(() => {
-    if (active === "audit") {
+    if (tab === "audit") {
       setAuditLoading(true);
       fetchSessionAudit(session.id).then((rows) => {
         setAudit(rows ?? []);
         setAuditLoading(false);
       });
     }
-  }, [active, session.id]);
+  }, [tab, session.id]);
 
   return (
     <div className="detail-tabs">
@@ -34,8 +41,8 @@ export function SessionDetailTabs({ session }: { session: AgentSession }) {
           return (
             <button
               key={t.key}
-              className={`detail-tabs__tab ${active === t.key ? "active" : ""}`}
-              onClick={() => setActive(t.key)}
+              className={`detail-tabs__tab ${tab === t.key ? "active" : ""}`}
+              onClick={() => onTabChange(t.key)}
             >
               {t.label}
               {c !== undefined ? <span className="detail-tabs__count">{c}</span> : null}
@@ -44,10 +51,10 @@ export function SessionDetailTabs({ session }: { session: AgentSession }) {
         })}
       </div>
       <div className="detail-tabs__body">
-        {active === "evidence" && <EvidenceTab evidence={session.evidence} />}
-        {active === "plan" && <PlanTab plan={session.plan} />}
-        {active === "remediation" && <RemediationTab remediation={session.remediation} />}
-        {active === "audit" && <AuditTab audit={audit} loading={auditLoading} executed={session.executedToolCalls} />}
+        {tab === "evidence" && <EvidenceTab evidence={session.evidence} />}
+        {tab === "plan" && <PlanTab plan={session.plan} />}
+        {tab === "remediation" && <RemediationTab remediation={session.remediation} />}
+        {tab === "audit" && <AuditTab audit={audit} loading={auditLoading} executed={session.executedToolCalls} />}
       </div>
     </div>
   );

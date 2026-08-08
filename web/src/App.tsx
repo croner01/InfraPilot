@@ -17,7 +17,7 @@ import {
   type PodInfo,
   type PodEvent,
 } from "./lib/api.js";
-import { SessionDetailTabs } from "./components/SessionDetailTabs.js";
+import { SessionDetailTabs, type DetailTab } from "./components/SessionDetailTabs.js";
 import { KnowledgePage } from "./components/KnowledgePage.js";
 import { TopologyPage } from "./components/TopologyPage.js";
 import { SettingsPage } from "./components/SettingsPage.js";
@@ -253,7 +253,11 @@ export default function App() {
                       chatEndRef={chatEndRef}
                     />
                   ) : (
-                    <SessionDetailTabs session={currentSession} />
+                    <SessionDetailTabs
+                      session={currentSession}
+                      tab={mainTab as DetailTab}
+                      onTabChange={(t) => setMainTab(t)}
+                    />
                   )}
                 </div>
                 {mainTab === "timeline" && (
