@@ -9,9 +9,11 @@
 // AgentCheckpoint，使 Server 重启后可以从 awaiting_approval 状态恢复。
 // ============================================================================
 
-import { getSession, updateSession } from "./sessionStore.js";
+import { getSession, updateSession, emitEvent } from "./sessionStore.js";
 import { createInitialCheckpoint, runAgentStep } from "./runner.js";
 import { loadCheckpoint, saveCheckpoint } from "./checkpoint.js";
+import { selectSkillsForTurn, toSkillDoc } from "../skills/packages/select.js";
+import { buildSkillContext } from "./prompts.js";
 
 /**
  * 用户发送新消息时调用。
@@ -24,6 +26,21 @@ export async function startAgentTurn(sessionId: string, userMessage: string): Pr
 
   let checkpoint = loadCheckpoint(sessionId);
   if (checkpoint) {
+    const selected = await selectSkillsForTurn(userMessage, session.activeSkills ?? []);
+    const skillContext = buildSkillContext(selected.map(toSkillDoc));
+    if (skillContext) {
+      checkpoint.history.push({
+        role: "system",
+        content: `# 本轮技能更新（替代之前的技能选择；会话历史保持完整）\n\n${skillContext}`,
+      });
+    }
+    updateSession(sessionId, (s) => {
+      s.activeSkills = selected.map((p) => p.name);
+    });
+    emitEvent(sessionId, "skills_activated", {
+      skills: selected.map((p) => p.name),
+      previous: session.activeSkills ?? [],
+    });
     // 延续已有对话：保留历史上下文，追加当前消息，重置本轮迭代计数
     checkpoint.history.push({ role: "user", content: userMessage });
     checkpoint.iteration = 0;

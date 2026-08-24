@@ -34,6 +34,7 @@ export function createSession(title: string): AgentSession {
     executedToolCalls: [],
     iteration: 0,
     maxIterations: 20,
+    activeSkills: [],
   };
   sessions.set(session.id, session);
   persist(session);

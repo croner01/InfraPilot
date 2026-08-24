@@ -10,9 +10,10 @@
 import { v4 as uuidv4 } from "uuid";
 import OpenAI from "openai";
 import { openai, getReasoningModel } from "../llm/client.js";
-import { buildSystemPrompt } from "./prompts.js";
+import { buildSystemPrompt, buildSkillContext } from "./prompts.js";
 import { ALL_TOOLS, classifyRisk, renderDiffPreview } from "../gateway/policy.js";
 import { buildRegistry, recallTools } from "../skills/registry/skillRegistry.js";
+import { selectSkillsForTurn, toSkillDoc } from "../skills/packages/select.js";
 import { searchKnowledgeCases, addKnowledgeCase } from "../skills/knowledge/store.js";
 import { executeToolCall } from "../gateway/commandGateway.js";
 import { computeArgsHash } from "../gateway/argsHash.js";
@@ -126,10 +127,20 @@ async function buildInitialHistory(sessionId: string, userMessage: string): Prom
 
   const similarCases = await fetchSimilarCases(recallQuery);
   const memoryContext = await buildMemoryContext(recallQuery);
+  const selectedSkills = await selectSkillsForTurn(recallQuery, []);
+  const skillContext = buildSkillContext(selectedSkills.map(toSkillDoc));
+  updateSession(sessionId, (s) => {
+    s.activeSkills = selectedSkills.map((p) => p.name);
+  });
+  emitEvent(sessionId, "skills_activated", {
+    skills: selectedSkills.map((p) => p.name),
+    turn: "initial",
+  });
   // P2: 即使 checkpoint 丢失（如历史被清、异常重启），也把会话已有状态注入上下文，避免彻底失忆
   const recoveredContext = buildRecoveredContext(session);
   const systemPrompt =
     buildSystemPrompt(buildToolListMarkdown(availableTools) + similarCases + memoryContext) +
+    (skillContext ? `\n\n${skillContext}` : "") +
     (recoveredContext
       ? `\n\n# 会话历史上下文(自动恢复)\n${recoveredContext}\n以上为历史会话已确认的状态与证据，仅作上下文参考，结论仍需结合实时证据交叉验证。`
       : "");

@@ -20,6 +20,14 @@ vi.mock("../skills/knowledge/store.js", () => ({
   searchKnowledgeCases: vi.fn().mockResolvedValue([]),
   addKnowledgeCase: vi.fn(),
 }));
+vi.mock("../skills/packages/select.js", () => ({
+  selectSkillsForTurn: vi.fn().mockResolvedValue([]),
+  toSkillDoc: vi.fn((p: { name: string; frontmatter: { description: string }; body: string }) => ({
+    name: p.name,
+    description: p.frontmatter.description,
+    body: p.body,
+  })),
+}));
 
 vi.mock("../gateway/commandGateway.js", () => ({
   executeToolCall: vi.fn(),
@@ -65,6 +73,7 @@ vi.mock("./sessionStore.js", () => ({
 
 vi.mock("./prompts.js", () => ({
   buildSystemPrompt: vi.fn((tools: string) => `system prompt\n${tools}`),
+  buildSkillContext: vi.fn(() => ""),
 }));
 
 vi.mock("./memoryStore.js", () => ({
