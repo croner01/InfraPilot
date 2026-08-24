@@ -1,0 +1,14 @@
+[
+  {
+    "name": "ceph-rbd-108",
+    "repo": "openai/skills",
+    "path": "skills/.experimental/ceph-rbd-108",
+    "description": "Ceph RBD (108) Cannot send after transport endpoint shutdown 排查指南"
+  },
+  {
+    "name": "k8s-pending-pod",
+    "repo": "openai/skills",
+    "path": "skills/.experimental/k8s-pending-pod",
+    "description": "Kubernetes Pod Pending/ContainerCreating 根因排查"
+  }
+]
