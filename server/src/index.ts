@@ -19,17 +19,19 @@ if (process.env.MCP_SERVER_MODE === "true") {
   })();
 } else {
   (async () => {
-    const [{ apiRouter }, { attachWsHub }, { startLogShipper, stopLogShipper }, { buildRegistry }] =
+    const [{ apiRouter }, { attachWsHub }, { startLogShipper, stopLogShipper }, { buildRegistry }, { skillStore }] =
       await Promise.all([
         import("./routes/api.js"),
         import("./ws/hub.js"),
         import("./skills/elk/logShipper.js"),
         import("./skills/registry/skillRegistry.js"),
+        import("./skills/packages/registry.js"),
       ]);
 
     // 启动时预构建 Skill Registry（orchestrator 中也会幂等构建，这里提前完成避免首次请求延迟）
     const { ALL_TOOLS } = await import("./gateway/policy.js");
     await buildRegistry(ALL_TOOLS);
+    await skillStore.init();
 
     // 将 runtime-config.json 中的远程主机同步到 SSH_HOSTS，确保 sshProxy 能读取
     const { syncRuntimeHostsToEnv, syncMcpEnv } = await import("./config/store.js");

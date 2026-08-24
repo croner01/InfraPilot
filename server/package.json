@@ -5,8 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "tsc -p tsconfig.json && npm run copy:drawio-script",
+    "build": "tsc -p tsconfig.json && npm run copy:drawio-script && npm run copy:skill-assets",
     "copy:drawio-script": "cp -r src/skills/drawio/scripts dist/skills/drawio/",
+    "copy:skill-assets": "cp -r src/skills/packages/curated-skills.json dist/skills/packages/",
     "start": "node dist/index.js",
     "seed": "tsx scripts/seedKnowledge.ts",
     "test": "vitest run",
