@@ -3838,3 +3838,112 @@ body {
   pointer-events: none;
   user-select: none;
 }
+
+/* Skill packages */
+.skill-package-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+.skill-package-card {
+  border: 1px solid var(--border-color, rgba(120, 130, 160, 0.25));
+  border-radius: 12px;
+  padding: 16px;
+  background: var(--surface-2, rgba(255, 255, 255, 0.03));
+  transition: opacity 0.2s ease, border-color 0.2s ease;
+}
+
+.skill-package-card--disabled {
+  opacity: 0.55;
+}
+
+.skill-package-card__header {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.skill-package-card__title {
+  margin: 0 0 6px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.skill-package-card__desc {
+  margin: 0 0 12px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-secondary, rgba(220, 225, 235, 0.72));
+}
+
+.skill-package-card__meta {
+  display: flex;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--text-tertiary, rgba(220, 225, 235, 0.5));
+  margin-bottom: 12px;
+}
+
+.skill-package-card__actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  background: rgba(52, 199, 123, 0.16);
+  color: #34c77b;
+}
+
+.chip--builtin {
+  background: rgba(120, 130, 255, 0.16);
+  color: #7882ff;
+}
+
+.empty-hint {
+  padding: 18px 0;
+  text-align: center;
+  color: var(--text-tertiary, rgba(220, 225, 235, 0.5));
+  font-size: 13px;
+}
+
+/* Install form */
+.install-form {
+  display: grid;
+  gap: 12px;
+}
+
+.install-form__row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.curated-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.curated-chip {
+  border: 1px solid var(--border-color, rgba(120, 130, 160, 0.25));
+  border-radius: 999px;
+  padding: 5px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  background: transparent;
+  color: inherit;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.curated-chip:hover {
+  border-color: #7882ff;
+  background: rgba(120, 130, 255, 0.1);
+}

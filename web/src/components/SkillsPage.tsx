@@ -1,5 +1,14 @@
-import { useState } from "react";
-import { exportDrawioDiagram, generateDrawioFlowchart, type LogRelation, downloadDrawioUrl } from "../lib/api.js";
+import { useEffect, useState } from "react";
+import {
+  exportDrawioDiagram,
+  generateDrawioFlowchart,
+  listSkills,
+  setSkillEnabled,
+  uninstallSkill,
+  type LogRelation,
+  type SkillPackageInfo,
+  downloadDrawioUrl,
+} from "../lib/api.js";
 import { DrawioImageViewer } from "./DrawioImageViewer.js";
 
 type NotifyFn = (msg: string, type?: "error" | "success") => void;
@@ -13,12 +22,116 @@ export function SkillsPage({ notify }: SkillsPageProps) {
     <div className="skills-page">
       <div className="page-header">
         <h1 className="page-header__title">技能中心</h1>
-        <p className="page-header__subtitle">扩展 AI Agent 的可观测与可视化能力</p>
+        <p className="page-header__subtitle">技能包管理：安装开源 SKILL.md、启停诊断方法论，扩展 AI Agent 能力</p>
       </div>
       <div className="main__content">
+        <SkillPackagesSection notify={notify} />
         <DrawioFlowchartSkill notify={notify} />
       </div>
     </div>
+  );
+}
+
+function SkillPackagesSection({ notify }: { notify: NotifyFn }) {
+  const [skills, setSkills] = useState<SkillPackageInfo[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const load = async () => {
+    setLoading(true);
+    const res = await listSkills((err) => notify(err.message));
+    if (res) setSkills(res.skills);
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  const handleToggle = async (s: SkillPackageInfo) => {
+    setBusy(s.name);
+    const res = await setSkillEnabled(s.name, !s.enabled, (err) => notify(err.message));
+    if (res) {
+      notify(`${s.name} 已${s.enabled ? "禁用" : "启用"}`, "success");
+      await load();
+    }
+    setBusy(null);
+  };
+
+  const handleUninstall = async (s: SkillPackageInfo) => {
+    if (!window.confirm(`确认卸载技能 ${s.name}？`)) return;
+    setBusy(s.name);
+    const res = await uninstallSkill(s.name, (err) => notify(err.message));
+    if (res) {
+      notify(`${s.name} 已卸载`, "success");
+      await load();
+    }
+    setBusy(null);
+  };
+
+  const enabledCount = skills.filter((s) => s.enabled).length;
+
+  return (
+    <section className="skill-card skill-packages">
+      <div className="skill-card__header">
+        <div className="skill-card__icon">🧩</div>
+        <div>
+          <h2 className="skill-card__title">已安装技能包</h2>
+          <p className="skill-card__desc">
+            共 {skills.length} 个，启用 {enabledCount} 个。诊断时按相关性自动召回并注入指令。
+          </p>
+        </div>
+      </div>
+      <div className="skill-card__body">
+        {loading ? (
+          <div className="empty-hint">加载中...</div>
+        ) : skills.length === 0 ? (
+          <div className="empty-hint">暂无已安装技能包，可在下方安装。</div>
+        ) : (
+          <div className="skill-package-grid">
+            {skills.map((s) => {
+              const builtin = s.name.startsWith("sre-");
+              return (
+                <div key={s.name} className={`skill-package-card${s.enabled ? "" : " skill-package-card--disabled"}`}>
+                  <div className="skill-package-card__header">
+                    <span className="chip">{s.enabled ? "启用" : "禁用"}</span>
+                    {builtin && <span className="chip chip--builtin">内置</span>}
+                  </div>
+                  <h3 className="skill-package-card__title">{s.name}</h3>
+                  <p className="skill-package-card__desc">{s.description}</p>
+                  <div className="skill-package-card__meta">
+                    <span>references {s.references.length}</span>
+                    <span>scripts {s.scripts.length}</span>
+                    {s.version && <span>{s.version}</span>}
+                  </div>
+                  <div className="skill-package-card__actions">
+                    <label className="toggle">
+                      <input
+                        type="checkbox"
+                        checked={s.enabled}
+                        disabled={busy === s.name}
+                        onChange={() => handleToggle(s)}
+                      />
+                      <span className="toggle__track" />
+                      <span className="toggle__label">{s.enabled ? "启用" : "禁用"}</span>
+                    </label>
+                    {!builtin && (
+                      <button
+                        className="btn btn--sm btn--danger-ghost"
+                        disabled={busy === s.name}
+                        onClick={() => handleUninstall(s)}
+                      >
+                        卸载
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </section>
   );
 }
 
