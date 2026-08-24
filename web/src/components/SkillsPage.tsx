@@ -2,9 +2,12 @@ import { useEffect, useState } from "react";
 import {
   exportDrawioDiagram,
   generateDrawioFlowchart,
+  installSkill,
+  listCuratedSkills,
   listSkills,
   setSkillEnabled,
   uninstallSkill,
+  type CuratedSkill,
   type LogRelation,
   type SkillPackageInfo,
   downloadDrawioUrl,
@@ -26,9 +29,103 @@ export function SkillsPage({ notify }: SkillsPageProps) {
       </div>
       <div className="main__content">
         <SkillPackagesSection notify={notify} />
+        <InstallSkillSection notify={notify} />
         <DrawioFlowchartSkill notify={notify} />
       </div>
     </div>
+  );
+}
+
+function InstallSkillSection({ notify }: { notify: NotifyFn }) {
+  const [curated, setCurated] = useState<CuratedSkill[]>([]);
+  const [repo, setRepo] = useState("");
+  const [skillPath, setSkillPath] = useState("");
+  const [ref, setRef] = useState("");
+  const [token, setToken] = useState("");
+  const [installing, setInstalling] = useState(false);
+
+  useEffect(() => {
+    listCuratedSkills((err) => notify(err.message)).then((res) => {
+      if (res) setCurated(res.skills);
+    });
+  }, []);
+
+  const fill = (c: CuratedSkill) => {
+    setRepo(c.repo);
+    setSkillPath(c.path);
+  };
+
+  const handleInstall = async () => {
+    if (!repo.trim() || !skillPath.trim()) {
+      notify("请填写 repo 与 path");
+      return;
+    }
+    setInstalling(true);
+    const res = await installSkill(
+      {
+        repo: repo.trim(),
+        path: skillPath.trim(),
+        ref: ref.trim() || undefined,
+        token: token.trim() || undefined,
+      },
+      (err) => notify(err.message)
+    );
+    if (res) {
+      notify(`${res.name} 安装成功，下一轮诊断自动生效`, "success");
+      setRepo("");
+      setSkillPath("");
+      setRef("");
+      setToken("");
+    }
+    setInstalling(false);
+  };
+
+  return (
+    <section className="skill-card">
+      <div className="skill-card__header">
+        <div className="skill-card__icon">⬇️</div>
+        <div>
+          <h2 className="skill-card__title">安装技能包</h2>
+          <p className="skill-card__desc">从 GitHub 仓库安装开源 SKILL.md 技能（git sparse-checkout），安装后默认启用。</p>
+        </div>
+      </div>
+      <div className="skill-card__body">
+        {curated.length > 0 && (
+          <div className="curated-list">
+            {curated.map((c) => (
+              <button key={`${c.repo}/${c.path}`} className="curated-chip" onClick={() => fill(c)} title={c.description}>
+                {c.name}
+              </button>
+            ))}
+          </div>
+        )}
+        <div className="install-form">
+          <div className="install-form__row">
+            <input
+              className="input"
+              placeholder="repo，如 openai/skills"
+              value={repo}
+              onChange={(e) => setRepo(e.target.value)}
+            />
+            <input
+              className="input"
+              placeholder="path，如 skills/.experimental/ceph-rbd-108"
+              value={skillPath}
+              onChange={(e) => setSkillPath(e.target.value)}
+            />
+          </div>
+          <div className="install-form__row">
+            <input className="input" placeholder="ref（可选，默认 main）" value={ref} onChange={(e) => setRef(e.target.value)} />
+            <input className="input" placeholder="token（可选，私有仓库）" type="password" value={token} onChange={(e) => setToken(e.target.value)} />
+          </div>
+          <div>
+            <button className="btn btn--primary" onClick={handleInstall} disabled={installing}>
+              {installing ? "安装中..." : "安装"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
   );
 }
 
