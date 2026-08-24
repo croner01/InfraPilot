@@ -8,7 +8,7 @@ import type OpenAI from "openai";
 export type RiskLevel = "readonly" | "low" | "medium" | "high" | "critical";
 
 export type SkillName = "linux" | "k8s" | "elk" | "clickhouse" | "openstack"
-  | "trace" | "knowledge" | "topology" | "drawio";
+  | "trace" | "knowledge" | "topology" | "drawio" | "skills";
 
 export interface ToolDef {
   name: string;
@@ -126,7 +126,8 @@ export type TimelineEventType =
   | "done"
   | "knowledge_case_added"
   | "checkpoint_saved"
-  | "runner_resumed";
+  | "runner_resumed"
+  | "skills_activated";
 
 export interface TimelineEvent {
   id: string;
@@ -163,6 +164,7 @@ export interface AgentSession {
   remediation?: Remediation;
   iteration: number;
   maxIterations: number;
+  activeSkills?: string[];
 }
 
 // -------------------- Agent Checkpoint（LangGraph Checkpoint 语义） --------------------

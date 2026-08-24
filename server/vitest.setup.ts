@@ -6,7 +6,8 @@ import os from "node:os";
 
 process.env.INFRAPILOT_DATA_DIR = path.join(os.tmpdir(), "infrapilot-test-data");
 
-const skillsFixture = path.join(os.tmpdir(), "infrapilot-test-skills");
+// 每个 vitest worker 进程使用独立技能目录，避免并行 worker 竞争同一目录
+const skillsFixture = path.join(os.tmpdir(), `infrapilot-test-skills-${process.pid}`);
 fs.rmSync(skillsFixture, { recursive: true, force: true });
 fs.mkdirSync(path.join(skillsFixture, "sre-systematic-debugging"), { recursive: true });
 fs.writeFileSync(

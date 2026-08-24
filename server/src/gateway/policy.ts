@@ -14,6 +14,7 @@ import { knowledgeTools } from "../skills/knowledge/tools.js";
 import { topologyTools } from "../skills/topology/tools.js";
 import { openstackTools } from "../skills/openstack/tools.js";
 import { drawioTools } from "../skills/drawio/tools.js";
+import { skillsTools } from "../skills/packages/tools.js";
 
 export const ALL_TOOLS: ToolDef[] = [
   ...linuxTools,
@@ -25,6 +26,7 @@ export const ALL_TOOLS: ToolDef[] = [
   ...topologyTools,
   ...openstackTools,
   ...drawioTools,
+  ...skillsTools,
 ];
 
 export function findTool(skill: SkillName, tool: string): ToolDef | undefined {

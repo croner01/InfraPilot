@@ -15,6 +15,7 @@ import { executeKnowledgeTool } from "../skills/knowledge/tools.js";
 import { executeTopologyTool } from "../skills/topology/tools.js";
 import { executeOpenStackTool } from "../skills/openstack/tools.js";
 import { executeDrawioTool } from "../skills/drawio/tools.js";
+import { executeSkillsTool } from "../skills/packages/tools.js";
 import { insertAudit, getApproval } from "../db/db.js";
 import { computeArgsHash } from "./argsHash.js";
 
@@ -38,6 +39,8 @@ async function dispatch(skill: string, tool: string, args: Record<string, unknow
       return executeOpenStackTool(tool, args);
     case "drawio":
       return executeDrawioTool(tool, args);
+    case "skills":
+      return executeSkillsTool(tool, args);
     default:
       return { success: false, error: `未知skill: ${skill}`, durationMs: 0 };
   }
