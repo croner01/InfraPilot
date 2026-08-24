@@ -379,3 +379,50 @@ export function exportDrawioDiagram(inputPath: string, format: "png" | "svg" | "
 export function downloadDrawioUrl(path: string) {
   return `${API_BASE}/skills/drawio/download?path=${encodeURIComponent(path)}`;
 }
+
+export interface SkillPackageInfo {
+  name: string;
+  description: string;
+  enabled: boolean;
+  references: string[];
+  scripts: string[];
+  assets: string[];
+  source?: string;
+  version?: string;
+}
+
+export interface CuratedSkill {
+  name: string;
+  repo: string;
+  path: string;
+  description: string;
+}
+
+export function listSkills(onError?: OnError) {
+  return request<{ skills: SkillPackageInfo[] }>("/skills", undefined, onError);
+}
+
+export function listCuratedSkills(onError?: OnError) {
+  return request<{ skills: CuratedSkill[] }>("/skills/curated", undefined, onError);
+}
+
+export function installSkill(
+  body: { repo: string; path: string; ref?: string; token?: string },
+  onError?: OnError
+) {
+  return request<{ ok: boolean; name: string }>("/skills/install", {
+    method: "POST",
+    body: JSON.stringify(body),
+  }, onError);
+}
+
+export function setSkillEnabled(name: string, enabled: boolean, onError?: OnError) {
+  return request<{ ok: boolean }>(`/skills/${encodeURIComponent(name)}`, {
+    method: "PATCH",
+    body: JSON.stringify({ enabled }),
+  }, onError);
+}
+
+export function uninstallSkill(name: string, onError?: OnError) {
+  return request<{ ok: boolean }>(`/skills/${encodeURIComponent(name)}`, { method: "DELETE" }, onError);
+}
