@@ -14,6 +14,7 @@ import {
 } from "../agent/memoryStore.js";
 import type { KnowledgeCaseInput } from "../types.js";
 import { configRouter } from "./config.js";
+import { skillsRouter } from "./skills.js";
 import { readFileSync } from "fs";
 import { resolve, join } from "path";
 
@@ -304,3 +305,7 @@ apiRouter.delete("/memories/:id", async (req, res) => {
     res.status(500).json({ error: err?.message ?? String(err) });
   }
 });
+
+// -------------------- Skill Packages 管理 --------------------
+
+apiRouter.use("/skills", skillsRouter);
