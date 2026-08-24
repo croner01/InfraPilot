@@ -98,6 +98,16 @@ CREATE TABLE IF NOT EXISTS session_memories (
   updated_at TEXT NOT NULL,
   embedding TEXT
 );
+
+CREATE TABLE IF NOT EXISTS skills (
+  name TEXT PRIMARY KEY,
+  dir TEXT NOT NULL,
+  source TEXT,
+  version TEXT,
+  enabled INTEGER NOT NULL DEFAULT 1,
+  installed_at TEXT NOT NULL,
+  checksum TEXT
+);
 `);
 
 function addColumnIfMissing(table: string, column: string, definition: string) {
@@ -183,6 +193,55 @@ export function deleteSession(id: string): boolean {
   });
   remove();
   return true;
+}
+
+export interface SkillRow {
+  name: string;
+  dir: string;
+  source: string | null;
+  version: string | null;
+  enabled: number;
+  installed_at: string;
+  checksum: string | null;
+}
+
+const upsertSkillStmt = db.prepare(`
+  INSERT INTO skills (name, dir, source, version, enabled, installed_at, checksum)
+  VALUES (@name, @dir, @source, @version, @enabled, @installedAt, @checksum)
+  ON CONFLICT(name) DO UPDATE SET
+    dir=@dir, source=@source, version=@version, enabled=@enabled,
+    installed_at=@installedAt, checksum=@checksum
+`);
+
+export function upsertSkillRow(row: {
+  name: string;
+  dir: string;
+  source?: string;
+  version?: string;
+  enabled: number;
+  checksum?: string;
+}) {
+  upsertSkillStmt.run({
+    name: row.name,
+    dir: row.dir,
+    source: row.source ?? null,
+    version: row.version ?? null,
+    enabled: row.enabled,
+    installedAt: new Date().toISOString(),
+    checksum: row.checksum ?? null,
+  });
+}
+
+export function listSkillRows(): SkillRow[] {
+  return db.prepare(`SELECT * FROM skills ORDER BY name`).all() as unknown as SkillRow[];
+}
+
+export function setSkillEnabledRow(name: string, enabled: boolean) {
+  db.prepare(`UPDATE skills SET enabled=? WHERE name=?`).run(enabled ? 1 : 0, name);
+}
+
+export function deleteSkillRow(name: string) {
+  db.prepare(`DELETE FROM skills WHERE name=?`).run(name);
 }
 
 export function getSession(id: string): { state_json: string } | undefined {
