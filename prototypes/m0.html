@@ -1,0 +1,828 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>InfraPilot M0 原型</title>
+<style>
+:root {
+  --bg: #f6f7f9;
+  --panel: #ffffff;
+  --border: #e3e6ea;
+  --border-strong: #d3d9df;
+  --text: #1a1d21;
+  --text-2: #5a6472;
+  --text-3: #8a94a3;
+  --accent: #0f766e;
+  --accent-hover: #115e59;
+  --accent-soft: #e6f4f2;
+  --danger: #dc2626;
+  --danger-soft: #fee2e2;
+  --warn: #d97706;
+  --warn-soft: #fef3c7;
+  --success: #059669;
+  --success-soft: #d1fae5;
+  --info: #2563eb;
+  --info-soft: #dbeafe;
+  --code-bg: #0f172a;
+  --code-text: #dbe4ef;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --sans: "SF Pro Text", -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --mono: ui-monospace, "SF Mono", "Cascadia Mono", "JetBrains Mono", Consolas, Menlo, monospace;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body {
+  font-family: var(--sans);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.6;
+  overflow: hidden;
+}
+.app { display: flex; flex-direction: column; height: 100vh; }
+
+/* ---------- Topbar ---------- */
+.topbar {
+  height: 56px; flex: 0 0 56px;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 16px 0 20px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+}
+.topbar__brand { display: flex; align-items: center; gap: 10px; }
+.topbar__logo {
+  width: 28px; height: 28px; border-radius: 7px;
+  background: var(--accent); color: #fff;
+  display: flex; align-items: center; justify-content: center;
+}
+.topbar__brand-name { font-size: 16px; font-weight: 600; letter-spacing: .2px; }
+.topbar__brand-sub { font-size: 12px; color: var(--text-3); margin-left: 4px; }
+.topbar__actions { display: flex; align-items: center; gap: 10px; }
+.pill {
+  display: inline-flex; align-items: center; gap: 7px;
+  height: 28px; padding: 0 11px;
+  border: 1px solid var(--border); border-radius: 999px;
+  background: var(--panel); color: var(--text-2); font-size: 12.5px;
+}
+.pill__dot { width: 7px; height: 7px; border-radius: 50%; background: var(--success); }
+.pill--warn { color: var(--warn); border-color: #f3dfc1; }
+.pill--danger { color: var(--danger); border-color: #f3cdcd; }
+.pill--warn .pill__dot { background: var(--warn); }
+.pill--danger .pill__dot { background: var(--danger); }
+.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 32px; padding: 0 14px;
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--panel); color: var(--text);
+  font-size: 13px; font-weight: 500; cursor: pointer;
+  transition: border-color .12s ease, background .12s ease;
+}
+.btn:hover { border-color: var(--border-strong); }
+.btn--primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn--primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+.btn--danger { background: var(--danger); border-color: var(--danger); color: #fff; }
+.btn--ghost { border-color: transparent; background: transparent; color: var(--text-2); }
+.btn--ghost:hover { background: var(--bg); }
+.btn--sm { height: 26px; padding: 0 10px; font-size: 12px; }
+
+/* ---------- Body ---------- */
+.body { display: flex; flex: 1; min-height: 0; }
+
+/* ---------- Sidebar ---------- */
+.sidebar {
+  width: 224px; flex: 0 0 224px;
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+  padding: 14px 10px;
+  display: flex; flex-direction: column; gap: 4px;
+}
+.sidebar__group { font-size: 11px; color: var(--text-3); padding: 12px 10px 6px; letter-spacing: .4px; }
+.nav-item {
+  display: flex; align-items: center; gap: 10px;
+  height: 34px; padding: 0 10px;
+  border-radius: var(--radius-sm);
+  color: var(--text-2); font-size: 13.5px; cursor: pointer;
+  border: 1px solid transparent;
+  transition: background .12s ease, color .12s ease;
+}
+.nav-item:hover { background: var(--bg); color: var(--text); }
+.nav-item.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.nav-item .icon { width: 17px; height: 17px; flex: 0 0 17px; }
+.nav-item__count {
+  margin-left: auto; font-size: 11.5px; color: var(--text-3);
+  background: var(--bg); border-radius: 999px; padding: 1px 7px;
+}
+.nav-item.active .nav-item__count { background: var(--accent); color: #fff; }
+
+/* ---------- Workspace ---------- */
+.workspace { flex: 1; min-width: 0; display: flex; }
+.workspace__view { flex: 1; min-width: 0; display: flex; }
+.view-hidden { display: none !important; }
+
+/* ---------- Alerts view ---------- */
+.alerts-page { flex: 1; overflow: auto; padding: 28px 32px; }
+.page-header { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 22px; }
+.page-header h1 { font-size: 20px; font-weight: 600; }
+.page-header .sub { color: var(--text-3); font-size: 13px; margin-top: 3px; }
+.filter-row { display: flex; gap: 8px; }
+.chip {
+  height: 28px; padding: 0 12px; border-radius: 999px;
+  border: 1px solid var(--border); background: var(--panel);
+  color: var(--text-2); font-size: 12.5px; cursor: pointer;
+}
+.chip.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+.section-title { font-size: 13px; font-weight: 600; color: var(--text); margin: 26px 0 12px; }
+
+.health-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; }
+.health-card {
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: var(--radius-md); padding: 14px 16px;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.health-card--alert { border-color: #f3cdcd; }
+.health-card__head { display: flex; align-items: center; gap: 8px; }
+.status-dot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 8px; }
+.status-dot--ok { background: var(--success); }
+.status-dot--warn { background: var(--warn); }
+.status-dot--err { background: var(--danger); }
+.health-card__name { font-size: 14px; font-weight: 600; }
+.health-card__meta { font-size: 12px; color: var(--text-3); }
+.health-card__chart { height: 34px; margin-top: 2px; }
+.health-card__chart svg { width: 100%; height: 100%; display: block; }
+.health-card__stat { display: flex; justify-content: space-between; font-size: 12px; color: var(--text-2); }
+.health-card__stat b { font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; }
+
+.alert-table { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden; }
+.alert-row {
+  display: grid; grid-template-columns: 86px 1fr 150px 130px 84px;
+  align-items: center; gap: 14px;
+  padding: 12px 16px; border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+.alert-row:last-child { border-bottom: none; }
+.alert-row:hover { background: #fafbfc; }
+.alert-row__head { font-weight: 600; }
+.alert-row__src { color: var(--text-3); font-size: 12px; }
+.alert-row__time { color: var(--text-2); font-variant-numeric: tabular-nums; font-size: 12.5px; }
+.badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  height: 22px; padding: 0 9px; border-radius: 999px;
+  font-size: 11.5px; font-weight: 600;
+}
+.badge--p0 { background: var(--danger-soft); color: var(--danger); }
+.badge--p1 { background: var(--warn-soft); color: var(--warn); }
+.badge--p2 { background: var(--info-soft); color: var(--info); }
+.badge--success { background: var(--success-soft); color: var(--success); }
+
+.quick-row { display: flex; gap: 12px; margin-top: 12px; }
+.quick-card {
+  flex: 1; max-width: 300px;
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: var(--radius-md); padding: 14px 16px; cursor: pointer;
+  transition: border-color .12s ease, box-shadow .12s ease;
+}
+.quick-card:hover { border-color: var(--accent); box-shadow: 0 2px 8px rgba(15, 118, 110, .08); }
+.quick-card b { display: block; font-size: 13.5px; margin-bottom: 3px; }
+.quick-card span { font-size: 12px; color: var(--text-3); }
+
+/* ---------- Session view ---------- */
+.session-page { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.session-head {
+  flex: 0 0 auto;
+  padding: 16px 28px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.session-head__title { font-size: 16px; font-weight: 600; }
+.session-head__id { font-family: var(--mono); font-size: 12px; color: var(--text-3); margin-top: 2px; }
+.session-head__stats { display: flex; gap: 22px; }
+.session-head__stat { text-align: right; }
+.session-head__stat b { font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.session-head__stat span { display: block; font-size: 11px; color: var(--text-3); }
+
+.session-main { flex: 1; min-width: 0; display: flex; }
+
+.conversation {
+  flex: 1; min-width: 0;
+  display: flex; flex-direction: column;
+  background: var(--bg);
+}
+.conv-scroll { flex: 1; overflow-y: auto; padding: 28px 32px 16px; }
+.conv-inner { max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; gap: 22px; }
+
+.stream-line {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 12.5px; color: var(--text-3);
+  padding: 6px 10px; background: var(--panel);
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+}
+.stream-line__dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); animation: pulse 1.2s infinite; }
+@keyframes pulse { 0%,100% { opacity: .35; } 50% { opacity: 1; } }
+
+.msg-user {
+  display: flex; justify-content: flex-end;
+}
+.msg-user__body {
+  max-width: 80%;
+  background: var(--accent-soft);
+  color: var(--text);
+  border-radius: 12px 12px 4px 12px;
+  padding: 11px 15px;
+  font-size: 14.5px;
+  line-height: 1.65;
+}
+.msg-ai { display: flex; gap: 12px; }
+.msg-ai__avatar {
+  width: 30px; height: 30px; border-radius: 8px; flex: 0 0 30px;
+  background: var(--accent); color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 700;
+}
+.msg-ai__body { flex: 1; min-width: 0; padding-top: 3px; }
+.msg-ai__body p { margin-bottom: 9px; }
+.msg-ai__body p:last-child { margin-bottom: 0; }
+.msg-ai__body h3 { font-size: 15px; font-weight: 600; margin: 14px 0 7px; }
+.msg-ai__body ul { margin: 8px 0; padding-left: 20px; }
+.msg-ai__body li { margin-bottom: 5px; }
+.msg-ai__body code { font-family: var(--mono); font-size: 12.5px; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; }
+.cite {
+  display: inline-flex; align-items: center;
+  height: 20px; padding: 0 7px; margin: 0 2px;
+  border-radius: 999px; background: var(--accent-soft);
+  color: var(--accent); font-size: 11.5px; font-weight: 600;
+  cursor: pointer; font-family: var(--mono);
+}
+.cite:hover { background: #d3ebe8; }
+
+.code-block {
+  margin: 10px 0;
+  background: var(--code-bg);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+.code-block__head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 7px 12px;
+  border-bottom: 1px solid rgba(255,255,255,.08);
+}
+.code-block__lang { font-family: var(--mono); font-size: 11.5px; color: #8fa3b8; }
+.code-block__copy { font-size: 11.5px; color: #8fa3b8; cursor: pointer; }
+.code-block__copy:hover { color: #cbd8e5; }
+.code-block pre {
+  padding: 12px 14px; overflow-x: auto;
+  font-family: var(--mono); font-size: 12.5px; line-height: 1.65;
+  color: var(--code-text);
+}
+.log-line--err { color: #f87171; }
+.log-line--warn { color: #fbbf24; }
+.log-line--info { color: #7dd3fc; }
+
+.process-group {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--panel);
+  overflow: hidden;
+}
+.process-group__head {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 14px;
+  cursor: pointer; user-select: none;
+  font-size: 13px; color: var(--text-2);
+}
+.process-group__head:hover { background: #fafbfc; }
+.process-group__head .chev { margin-left: auto; transition: transform .15s ease; }
+.process-group.open .process-group__head .chev { transform: rotate(90deg); }
+.process-group__body { display: none; border-top: 1px solid var(--border); }
+.process-group.open .process-group__body { display: block; }
+.tool-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 14px; font-size: 12.5px;
+  border-bottom: 1px solid var(--border);
+  font-family: var(--mono);
+}
+.tool-row:last-child { border-bottom: none; }
+.tool-row .ok { color: var(--success); }
+.tool-row .run { color: var(--warn); }
+.tool-row .name { color: var(--text); }
+.tool-row .time { margin-left: auto; color: var(--text-3); font-size: 11.5px; }
+
+.conclusion-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius-md);
+  padding: 18px 20px;
+}
+.conclusion-card__head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.conclusion-card__title { font-size: 15px; font-weight: 600; }
+.confidence {
+  display: inline-flex; align-items: center; gap: 5px;
+  height: 24px; padding: 0 10px;
+  background: var(--accent-soft); color: var(--accent);
+  border-radius: 999px; font-size: 12px; font-weight: 600;
+}
+.conclusion-card__root { font-size: 14.5px; line-height: 1.7; margin-bottom: 6px; }
+.conclusion-card__chain { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 12px; }
+.conclusion-card .field { display: flex; gap: 10px; font-size: 13px; margin-bottom: 8px; }
+.conclusion-card .field .k { color: var(--text-3); flex: 0 0 64px; }
+.risk-badge { display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border-radius: 4px; font-size: 11.5px; font-weight: 600; }
+.risk-badge--readonly { background: var(--info-soft); color: var(--info); }
+.risk-badge--low { background: var(--success-soft); color: var(--success); }
+.risk-badge--medium { background: var(--warn-soft); color: var(--warn); }
+.risk-badge--high { background: #ffedd5; color: #ea580c; }
+.risk-badge--critical { background: var(--danger-soft); color: var(--danger); }
+.remediation-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 12px; border: 1px solid var(--border);
+  border-radius: var(--radius-sm); margin-bottom: 8px;
+  font-size: 13px;
+}
+.remediation-row .idx {
+  width: 20px; height: 20px; flex: 0 0 20px;
+  border-radius: 50%; background: var(--bg);
+  color: var(--text-2); font-size: 12px; font-weight: 600;
+  display: flex; align-items: center; justify-content: center;
+}
+.remediation-row .cmd { font-family: var(--mono); font-size: 12px; color: var(--text-2); background: var(--bg); border-radius: 4px; padding: 2px 6px; }
+.conclusion-card__actions { display: flex; gap: 10px; margin-top: 14px; }
+
+.composer {
+  flex: 0 0 auto;
+  padding: 14px 32px 18px;
+  background: var(--bg);
+}
+.composer__box {
+  max-width: 760px; margin: 0 auto;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 10px 12px;
+  display: flex; align-items: flex-end; gap: 10px;
+  box-shadow: 0 1px 3px rgba(0,0,0,.04);
+}
+.composer__box:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(15,118,110,.12); }
+.composer__input {
+  flex: 1; border: none; outline: none;
+  font-family: var(--sans); font-size: 14px; line-height: 1.5;
+  padding: 8px 4px; resize: none; color: var(--text);
+  min-height: 40px;
+}
+.composer__input::placeholder { color: var(--text-3); }
+
+/* ---------- Right panel ---------- */
+.right-panel {
+  width: 356px; flex: 0 0 356px;
+  background: var(--panel);
+  border-left: 1px solid var(--border);
+  display: flex; flex-direction: column;
+  transition: margin-right .18s ease;
+}
+.right-panel.collapsed { margin-right: -356px; }
+.right-panel__head {
+  height: 46px; flex: 0 0 46px;
+  display: flex; align-items: center; gap: 4px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--border);
+}
+.rp-tab {
+  height: 30px; padding: 0 12px;
+  border-radius: var(--radius-sm);
+  font-size: 13px; color: var(--text-2); cursor: pointer;
+  border: 1px solid transparent;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.rp-tab.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.rp-collapse { margin-left: auto; width: 28px; height: 28px; border: none; background: transparent; color: var(--text-3); border-radius: 6px; cursor: pointer; }
+.rp-collapse:hover { background: var(--bg); color: var(--text-2); }
+.right-panel__body { flex: 1; overflow-y: auto; padding: 14px 16px; }
+.rp-hidden { display: none; }
+
+.hypothesis {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 12px 14px; margin-bottom: 10px;
+  background: var(--panel);
+}
+.hypothesis--confirmed { border-left: 3px solid var(--success); }
+.hypothesis--ruled { border-left: 3px solid var(--border-strong); opacity: .72; }
+.hypothesis__head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.hypothesis__status { font-size: 11.5px; font-weight: 600; }
+.hypothesis__status--confirmed { color: var(--success); }
+.hypothesis__status--ruled { color: var(--text-3); }
+.hypothesis__text { font-size: 13.5px; line-height: 1.6; }
+.hypothesis__refs { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+
+.ev-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 12px 14px; margin-bottom: 10px;
+  background: var(--panel);
+}
+.ev-card--highlight { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(15,118,110,.12); }
+.ev-card__head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.ev-type { font-size: 11px; font-family: var(--mono); color: var(--accent); background: var(--accent-soft); padding: 2px 7px; border-radius: 4px; }
+.ev-conf { margin-left: auto; font-size: 11.5px; color: var(--text-3); }
+.ev-card__summary { font-size: 13px; margin-bottom: 8px; }
+.ev-card pre {
+  background: var(--bg); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 8px 10px;
+  font-family: var(--mono); font-size: 11.5px; line-height: 1.55;
+  color: var(--text-2); overflow-x: auto;
+}
+.ev-card__time { font-size: 11.5px; color: var(--text-3); margin-top: 8px; }
+
+.obj-head { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+.obj-head h3 { font-size: 15px; font-weight: 600; }
+.obj-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 14px; }
+.obj-field { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 10px; }
+.obj-field .k { font-size: 11px; color: var(--text-3); display: block; }
+.obj-field .v { font-size: 12.5px; font-weight: 500; margin-top: 2px; font-variant-numeric: tabular-nums; }
+.spark-panel { margin-bottom: 14px; }
+.spark-panel__title { font-size: 12px; color: var(--text-2); margin-bottom: 6px; }
+.spark-panel svg { width: 100%; height: 56px; display: block; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.mini-list { border: 1px solid var(--border); border-radius: var(--radius-md); margin-bottom: 14px; overflow: hidden; }
+.mini-list__head { padding: 9px 12px; font-size: 12px; font-weight: 600; border-bottom: 1px solid var(--border); background: #fafbfc; }
+.mini-list__row { padding: 8px 12px; font-size: 12.5px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 8px; }
+.mini-list__row:last-child { border-bottom: none; }
+.mini-list__row .time { margin-left: auto; color: var(--text-3); font-family: var(--mono); font-size: 11px; }
+.level { width: 46px; font-size: 10.5px; font-weight: 700; font-family: var(--mono); }
+.level--error { color: var(--danger); }
+.level--warn { color: var(--warn); }
+.level--info { color: var(--info); }
+.mono { font-family: var(--mono); }
+
+::-webkit-scrollbar { width: 9px; height: 9px; }
+::-webkit-scrollbar-thumb { background: #d8dde3; border-radius: 6px; border: 2px solid transparent; background-clip: content-box; }
+::-webkit-scrollbar-track { background: transparent; }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header class="topbar">
+    <div class="topbar__brand">
+      <div class="topbar__logo">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+      </div>
+      <span class="topbar__brand-name">InfraPilot</span>
+      <span class="topbar__brand-sub">AI SRE 智能运维</span>
+    </div>
+    <div class="topbar__actions">
+      <span class="pill"><span class="pill__dot"></span>实时连接</span>
+      <span class="pill pill--warn"><span class="pill__dot"></span>2 待审批</span>
+      <span class="pill pill--danger"><span class="pill__dot"></span>3 活跃告警</span>
+      <button class="btn btn--primary" id="btnNewSession">+ 新建会话</button>
+    </div>
+  </header>
+
+  <div class="body">
+    <nav class="sidebar">
+      <div class="sidebar__group">工作区</div>
+      <div class="nav-item" data-view="alerts">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
+        告警中心 <span class="nav-item__count">3</span>
+      </div>
+      <div class="nav-item" data-view="session">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        会话中心
+      </div>
+      <div class="sidebar__group">资源</div>
+      <div class="nav-item" data-view="none">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+        知识库
+      </div>
+      <div class="nav-item" data-view="none">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9L17 7M7 17l-2.1 2.1"/></svg>
+        拓扑
+      </div>
+      <div class="nav-item" data-view="none">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+        技能
+      </div>
+      <div class="nav-item" data-view="none">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        设置
+      </div>
+    </nav>
+
+    <main class="workspace">
+
+      <!-- ============ 告警中心 ============ -->
+      <section class="workspace__view" id="view-alerts">
+        <div class="alerts-page">
+          <div class="page-header">
+            <div>
+              <h1>告警中心</h1>
+              <div class="sub">服务健康总览与待处理告警</div>
+            </div>
+            <div class="filter-row">
+              <span class="chip active">全部</span>
+              <span class="chip">未处理</span>
+              <span class="chip">严重</span>
+            </div>
+          </div>
+
+          <div class="section-title">服务健康</div>
+          <div class="health-grid">
+            <div class="health-card health-card--alert">
+              <div class="health-card__head"><span class="status-dot status-dot--err"></span><span class="health-card__name">order-api</span></div>
+              <div class="health-card__meta">order-service · 3 副本 · 重启 14 次</div>
+              <div class="health-card__chart">
+                <svg viewBox="0 0 200 34" preserveAspectRatio="none"><polyline points="0,10 20,12 40,9 60,15 80,13 100,18 120,16 140,22 160,20 180,26 200,25" fill="none" stroke="#dc2626" stroke-width="1.6"/></svg>
+              </div>
+              <div class="health-card__stat"><span>内存占用</span><b>98%</b></div>
+            </div>
+            <div class="health-card">
+              <div class="health-card__head"><span class="status-dot status-dot--ok"></span><span class="health-card__name">gateway</span></div>
+              <div class="health-card__meta">edge · 2 副本</div>
+              <div class="health-card__chart">
+                <svg viewBox="0 0 200 34" preserveAspectRatio="none"><polyline points="0,20 20,18 40,22 60,19 80,21 100,18 120,20 140,17 160,19 180,18 200,20" fill="none" stroke="#059669" stroke-width="1.6"/></svg>
+              </div>
+              <div class="health-card__stat"><span>请求延迟 p99</span><b>42ms</b></div>
+            </div>
+            <div class="health-card health-card--alert">
+              <div class="health-card__head"><span class="status-dot status-dot--warn"></span><span class="health-card__name">payment-service</span></div>
+              <div class="health-card__meta">pay · 2 副本</div>
+              <div class="health-card__chart">
+                <svg viewBox="0 0 200 34" preserveAspectRatio="none"><polyline points="0,18 20,20 40,16 60,19 80,22 100,18 120,24 140,22 160,27 180,26 200,28" fill="none" stroke="#d97706" stroke-width="1.6"/></svg>
+              </div>
+              <div class="health-card__stat"><span>5xx 比例</span><b>1.8%</b></div>
+            </div>
+            <div class="health-card">
+              <div class="health-card__head"><span class="status-dot status-dot--ok"></span><span class="health-card__name">auth-service</span></div>
+              <div class="health-card__meta">iam · 2 副本</div>
+              <div class="health-card__chart">
+                <svg viewBox="0 0 200 34" preserveAspectRatio="none"><polyline points="0,16 20,18 40,15 60,17 80,14 100,16 120,15 140,17 160,15 180,16 200,15" fill="none" stroke="#059669" stroke-width="1.6"/></svg>
+              </div>
+              <div class="health-card__stat"><span>QPS</span><b>1.2k</b></div>
+            </div>
+          </div>
+
+          <div class="section-title">最近告警</div>
+          <div class="alert-table">
+            <div class="alert-row">
+              <span class="badge badge--p0">P0 严重</span>
+              <div><div class="alert-row__head">order-api Pod CrashLoopBackOff</div><div class="alert-row__src">order-service/order-api · Prometheus</div></div>
+              <span class="alert-row__time">10:24 · 14 分钟前</span>
+              <span class="badge badge--p0">处理中</span>
+              <button class="btn btn--sm" onclick="openSession()">一键开查</button>
+            </div>
+            <div class="alert-row">
+              <span class="badge badge--p1">P1 警告</span>
+              <div><div class="alert-row__head">payment-service 5xx 上升</div><div class="alert-row__src">pay/payment-service · Prometheus</div></div>
+              <span class="alert-row__time">10:02 · 36 分钟前</span>
+              <span class="badge badge--p1">未处理</span>
+              <button class="btn btn--sm" onclick="openSession()">一键开查</button>
+            </div>
+            <div class="alert-row">
+              <span class="badge badge--p2">P2 提示</span>
+              <div><div class="alert-row__head">node-08 磁盘使用率 > 80%</div><div class="alert-row__src">k8s-node · node_exporter</div></div>
+              <span class="alert-row__time">09:41 · 57 分钟前</span>
+              <span class="badge badge--p2">未处理</span>
+              <button class="btn btn--sm" onclick="openSession()">一键开查</button>
+            </div>
+          </div>
+
+          <div class="section-title">快捷入口</div>
+          <div class="quick-row">
+            <div class="quick-card"><b>排查 Pod 异常</b><span>输入故障现象，Agent 自动诊断</span></div>
+            <div class="quick-card"><b>查询日志</b><span>按服务/关键字检索 ELK 日志</span></div>
+            <div class="quick-card"><b>查看告警</b><span>进入告警中心处理待办</span></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ 会话工作台 ============ -->
+      <section class="workspace__view view-hidden" id="view-session">
+        <div class="session-page">
+          <div class="session-head">
+            <div>
+              <div class="session-head__title">order-api 内存异常排查</div>
+              <div class="session-head__id">run-207ef09c6207 · 已得出结论</div>
+            </div>
+            <div class="session-head__stats">
+              <div class="session-head__stat"><b>6</b><span>迭代轮次</span></div>
+              <div class="session-head__stat"><b>4</b><span>证据</span></div>
+              <div class="session-head__stat"><b>5</b><span>已执行工具</span></div>
+            </div>
+          </div>
+
+          <div class="session-main">
+            <div class="conversation">
+              <div class="conv-scroll">
+                <div class="conv-inner">
+                  <div class="stream-line"><span class="stream-line__dot"></span>正在分析节点 node-08 资源使用情况…</div>
+
+                  <div class="msg-user"><div class="msg-user__body">order-api Pod 一直在重启，帮我查下原因</div></div>
+
+                  <div class="msg-ai">
+                    <div class="msg-ai__avatar">AI</div>
+                    <div class="msg-ai__body">
+                      <p>已定位到 <code>order-service/order-api</code> 的重启根因，完整证据链如下。</p>
+                      <h3>初步判断</h3>
+                      <ul>
+                        <li>Pod 状态 <strong>CrashLoopBackOff</strong>，重启 14 次，最近一次退出码 <code>137 (OOMKilled)</code></li>
+                        <li>内存 limit 256Mi，近 30 分钟峰值接近上限<span class="cite" data-ev="ev1">证据#1</span><span class="cite" data-ev="ev2">证据#2</span></li>
+                        <li>节点 node-08 资源充足，已排除节点级问题<span class="cite" data-ev="ev3">证据#3</span></li>
+                      </ul>
+                      <div class="code-block">
+                        <div class="code-block__head"><span class="code-block__lang">kubectl describe pod / 最近事件</span><span class="code-block__copy">复制</span></div>
+                        <pre><span class="log-line--info">Events:</span>
+<span class="log-line--info">  Normal  Scheduled  18m  default-scheduler  Successfully assigned</span>
+<span class="log-line--warn">  Warning  BackOff    17m  kubelet            Back-off restarting failed container</span>
+<span class="log-line--err">  Warning  OOMKilled  16m  kubelet            Memory limit exceeded (256Mi)</span></pre>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="process-group open" id="processGroup">
+                    <div class="process-group__head" onclick="toggleProcess(this)">
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+                      诊断过程 · 已执行 5 个工具 · 收集 4 条证据
+                      <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+                    </div>
+                    <div class="process-group__body">
+                      <div class="tool-row"><span class="ok">✓</span><span class="name">k8s.describe_pod</span><span class="time">0.8s</span></div>
+                      <div class="tool-row"><span class="ok">✓</span><span class="name">elk.search_logs(service=order-api, level=ERROR)</span><span class="time">1.2s</span></div>
+                      <div class="tool-row"><span class="ok">✓</span><span class="name">k8s.get_events(namespace=order-service)</span><span class="time">0.6s</span></div>
+                      <div class="tool-row"><span class="ok">✓</span><span class="name">linux.get_resource_usage(node-08)</span><span class="time">0.9s</span></div>
+                      <div class="tool-row"><span class="run">●</span><span class="name">clickhouse.query(内存时序聚合)</span><span class="time">运行中</span></div>
+                    </div>
+                  </div>
+
+                  <div class="conclusion-card">
+                    <div class="conclusion-card__head">
+                      <span class="conclusion-card__title">根因分析结论</span>
+                      <span class="confidence">置信度 87%</span>
+                    </div>
+                    <div class="conclusion-card__root">order-api 容器内存 limit（256Mi）低于高峰流量需求，触发 OOMKilled 并持续重启；节点资源充足，排除节点级原因。</div>
+                    <div class="conclusion-card__chain">
+                      <span class="cite" data-ev="ev1">证据#1 Pod 事件</span>
+                      <span class="cite" data-ev="ev2">证据#2 内存曲线</span>
+                      <span class="cite" data-ev="ev3">证据#3 节点资源</span>
+                      <span class="cite" data-ev="ev4">证据#4 错误日志</span>
+                    </div>
+                    <div class="field"><span class="k">影响面</span><span>order-service 全部 3 个副本，生产核心链路（订单服务）</span></div>
+                    <div class="field"><span class="k">修复建议</span></div>
+                    <div class="remediation-row"><span class="idx">1</span><span>将内存 limit 从 256Mi 调整到 512Mi</span><span class="cmd">kubectl patch deploy order-api</span><span class="risk-badge risk-badge--medium" style="margin-left:auto">medium</span></div>
+                    <div class="remediation-row"><span class="idx">2</span><span>观察 15 分钟，确认重启次数归零</span><span class="cmd">kubectl get pods -w</span><span class="risk-badge risk-badge--low" style="margin-left:auto">low</span></div>
+                    <div class="conclusion-card__actions">
+                      <button class="btn btn--primary">批准执行修复</button>
+                      <button class="btn">拒绝</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="composer">
+                <div class="composer__box">
+                  <textarea class="composer__input" placeholder="继续追问，或描述新的故障现象…"></textarea>
+                  <button class="btn btn--primary">发送</button>
+                </div>
+              </div>
+            </div>
+
+            <aside class="right-panel" id="rightPanel">
+              <div class="right-panel__head">
+                <span class="rp-tab active" data-tab="process">调查过程</span>
+                <span class="rp-tab" data-tab="evidence">证据链</span>
+                <span class="rp-tab" data-tab="object">对象上下文</span>
+                <button class="rp-collapse" id="btnCollapse" title="折叠右栏">»</button>
+              </div>
+              <div class="right-panel__body">
+                <div class="rp-body" id="rp-process">
+                  <div class="hypothesis hypothesis--confirmed">
+                    <div class="hypothesis__head"><span class="status-dot status-dot--err"></span><span class="hypothesis__status hypothesis__status--confirmed">已确认</span></div>
+                    <div class="hypothesis__text">内存 limit 256Mi 过低，高峰流量触发 OOMKilled</div>
+                    <div class="hypothesis__refs"><span class="cite" data-ev="ev1">证据#1</span><span class="cite" data-ev="ev2">证据#2</span><span class="cite" data-ev="ev4">证据#4</span></div>
+                  </div>
+                  <div class="hypothesis hypothesis--ruled">
+                    <div class="hypothesis__head"><span class="status-dot status-dot--ok"></span><span class="hypothesis__status hypothesis__status--ruled">已排除</span></div>
+                    <div class="hypothesis__text">节点 node-08 资源不足导致驱逐</div>
+                    <div class="hypothesis__refs"><span class="cite" data-ev="ev3">证据#3</span></div>
+                  </div>
+                  <div class="hypothesis hypothesis--ruled">
+                    <div class="hypothesis__head"><span class="status-dot status-dot--ok"></span><span class="hypothesis__status hypothesis__status--ruled">已排除</span></div>
+                    <div class="hypothesis__text">镜像拉取失败或探针配置错误</div>
+                  </div>
+                </div>
+                <div class="rp-body rp-hidden" id="rp-evidence">
+                  <div class="ev-card ev-card--highlight" id="ev1">
+                    <div class="ev-card__head"><span class="ev-type">k8s_event</span><span class="ev-conf">置信度 92%</span></div>
+                    <div class="ev-card__summary">Pod 事件：OOMKilled，退出码 137，最近 30 分钟发生 14 次</div>
+                    <pre>{ "lastState": "OOMKilled", "exitCode": 137, "restartCount": 14 }</pre>
+                    <div class="ev-card__time">10:38 · 来自 kubectl describe pod</div>
+                  </div>
+                  <div class="ev-card" id="ev2">
+                    <div class="ev-card__head"><span class="ev-type">metric</span><span class="ev-conf">置信度 88%</span></div>
+                    <div class="ev-card__summary">内存使用率曲线：峰值 98%，持续超过 limit 阈值</div>
+                    <div class="spark-panel"><svg viewBox="0 0 300 56" preserveAspectRatio="none"><polyline points="0,46 25,44 50,47 75,42 100,45 125,40 150,44 175,34 200,38 225,26 250,30 275,14 300,18" fill="none" stroke="#dc2626" stroke-width="1.8"/><line x1="0" y1="10" x2="300" y2="10" stroke="#8a94a3" stroke-dasharray="4 3"/></svg></div>
+                    <div class="ev-card__time">10:35 · 来自 k8s metrics API</div>
+                  </div>
+                  <div class="ev-card" id="ev3">
+                    <div class="ev-card__head"><span class="ev-type">linux</span><span class="ev-conf">置信度 81%</span></div>
+                    <div class="ev-card__summary">node-08 CPU 42% / 内存 55%，无驱逐事件</div>
+                    <pre>{ "cpu": 0.42, "memory": 0.55, "eviction": false }</pre>
+                    <div class="ev-card__time">10:36 · 来自 linux.get_resource_usage</div>
+                  </div>
+                  <div class="ev-card" id="ev4">
+                    <div class="ev-card__head"><span class="ev-type">log_cluster</span><span class="ev-conf">置信度 84%</span></div>
+                    <div class="ev-card__summary">错误日志聚类：2 类与内存相关，1 类为连接超时（次要）</div>
+                    <div class="ev-card__time">10:35 · 来自 elk.cluster_similar_errors</div>
+                  </div>
+                </div>
+                <div class="rp-body rp-hidden" id="rp-object">
+                  <div class="obj-head">
+                    <span class="status-dot status-dot--err"></span>
+                    <h3>order-api-7f9c6d4b8c-x2j8l</h3>
+                    <span class="badge badge--p0">CrashLoopBackOff</span>
+                  </div>
+                  <div class="obj-grid">
+                    <div class="obj-field"><span class="k">命名空间</span><span class="v">order-service</span></div>
+                    <div class="obj-field"><span class="k">节点</span><span class="v">node-08</span></div>
+                    <div class="obj-field"><span class="k">内存 limit</span><span class="v mono">256Mi</span></div>
+                    <div class="obj-field"><span class="k">重启次数</span><span class="v">14</span></div>
+                    <div class="obj-field"><span class="k">Pod IP</span><span class="v mono">10.42.1.77</span></div>
+                    <div class="obj-field"><span class="k">启动时间</span><span class="v">10:24</span></div>
+                  </div>
+                  <div class="spark-panel">
+                    <div class="spark-panel__title">内存使用 · 近 30 分钟</div>
+                    <svg viewBox="0 0 300 56" preserveAspectRatio="none"><polyline points="0,48 25,46 50,47 75,43 100,45 125,41 150,44 175,35 200,39 225,28 250,32 275,16 300,20" fill="none" stroke="#dc2626" stroke-width="1.8"/><line x1="0" y1="8" x2="300" y2="8" stroke="#8a94a3" stroke-dasharray="4 3"/><text x="272" y="18" fill="#8a94a3" font-size="9">limit 256Mi</text></svg>
+                  </div>
+                  <div class="spark-panel">
+                    <div class="spark-panel__title">CPU 使用 · 近 30 分钟</div>
+                    <svg viewBox="0 0 300 56" preserveAspectRatio="none"><polyline points="0,40 25,42 50,38 75,41 100,36 125,39 150,35 175,38 200,33 225,36 250,30 275,34 300,29" fill="none" stroke="#2563eb" stroke-width="1.8"/></svg>
+                  </div>
+                  <div class="mini-list">
+                    <div class="mini-list__head">最近日志</div>
+                    <div class="mini-list__row"><span class="level level--error">ERROR</span><span>Memory limit exceeded</span><span class="time">10:24:31</span></div>
+                    <div class="mini-list__row"><span class="level level--error">ERROR</span><span>java.lang.OutOfMemoryError</span><span class="time">10:24:29</span></div>
+                    <div class="mini-list__row"><span class="level level--warn">WARN</span><span>Heap usage 92%</span><span class="time">10:24:12</span></div>
+                  </div>
+                  <div class="mini-list">
+                    <div class="mini-list__head">关联告警</div>
+                    <div class="mini-list__row"><span class="badge badge--p0">P0</span><span>order-api CrashLoopBackOff</span><span class="time">10:24</span></div>
+                    <div class="mini-list__row"><span class="badge badge--p2">P2</span><span>内存使用率 > 90% 持续 10m</span><span class="time">10:10</span></div>
+                  </div>
+                  <button class="btn" style="width:100%">就此对象发起诊断</button>
+                </div>
+              </div>
+            </aside>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+</div>
+
+<script>
+function openSession() {
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.toggle('active', n.dataset.view === 'session'));
+  document.getElementById('view-alerts').classList.add('view-hidden');
+  document.getElementById('view-session').classList.remove('view-hidden');
+}
+function toggleProcess(head) {
+  head.parentElement.classList.toggle('open');
+}
+document.querySelectorAll('.nav-item[data-view]').forEach(item => {
+  item.addEventListener('click', () => {
+    if (item.dataset.view === 'none') return;
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.toggle('active', n === item));
+    document.getElementById('view-alerts').classList.toggle('view-hidden', item.dataset.view !== 'alerts');
+    document.getElementById('view-session').classList.toggle('view-hidden', item.dataset.view !== 'session');
+  });
+});
+document.querySelectorAll('.rp-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.rp-tab').forEach(t => t.classList.toggle('active', t === tab));
+    document.getElementById('rp-process').classList.toggle('rp-hidden', tab.dataset.tab !== 'process');
+    document.getElementById('rp-evidence').classList.toggle('rp-hidden', tab.dataset.tab !== 'evidence');
+    document.getElementById('rp-object').classList.toggle('rp-hidden', tab.dataset.tab !== 'object');
+  });
+});
+document.querySelectorAll('.cite').forEach(cite => {
+  cite.addEventListener('click', () => {
+    document.querySelectorAll('.rp-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === 'evidence'));
+    document.getElementById('rp-process').classList.add('rp-hidden');
+    document.getElementById('rp-evidence').classList.remove('rp-hidden');
+    document.getElementById('rp-object').classList.add('rp-hidden');
+    document.querySelectorAll('.ev-card').forEach(c => c.classList.remove('ev-card--highlight'));
+    const target = document.getElementById(cite.dataset.ev);
+    if (target) { target.classList.add('ev-card--highlight'); target.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+  });
+});
+document.getElementById('btnCollapse').addEventListener('click', () => {
+  const panel = document.getElementById('rightPanel');
+  const collapsed = panel.classList.toggle('collapsed');
+  document.getElementById('btnCollapse').textContent = collapsed ? '«' : '»';
+});
+document.getElementById('btnNewSession').addEventListener('click', openSession);
+</script>
+</body>
+</html>
