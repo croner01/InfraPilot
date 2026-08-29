@@ -13,12 +13,11 @@ const SKIP_TYPES = new Set(['checkpoint_saved', 'runner_resumed'])
 interface ConversationProps {
   events: TimelineEvent[]
   loading: boolean
-  onApprove: (id: string, approved: boolean) => void
   renderSpecial: (event: TimelineEvent) => ReactNode
   chatEndRef: RefObject<HTMLDivElement | null>
 }
 
-export function Conversation({ events, loading, onApprove, renderSpecial, chatEndRef }: ConversationProps) {
+export function Conversation({ events, loading, renderSpecial, chatEndRef }: ConversationProps) {
   const { items, runningTool } = buildItems(events, renderSpecial)
   return (
     <div className="ui-conversation">

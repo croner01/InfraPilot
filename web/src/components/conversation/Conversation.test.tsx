@@ -30,7 +30,6 @@ describe('Conversation', () => {
       <Conversation
         events={events}
         loading={false}
-        onApprove={() => {}}
         renderSpecial={(event) => <div data-testid={`special-${event.type}`}>{event.type}</div>}
         chatEndRef={ref}
       />,
@@ -51,7 +50,6 @@ describe('Conversation', () => {
       <Conversation
         events={[ev('e1', 'tool_call_start', { skill: 'k8s', tool: 'describe_pod' })]}
         loading
-        onApprove={() => {}}
         renderSpecial={() => null}
         chatEndRef={createRef<HTMLDivElement | null>()}
       />,
