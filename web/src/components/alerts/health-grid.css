@@ -13,7 +13,7 @@
   gap: 8px;
 }
 .health-card--alert {
-  border-color: #f3cdcd;
+  border-color: var(--alert-border);
 }
 .health-card__head {
   display: flex;

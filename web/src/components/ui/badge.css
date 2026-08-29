@@ -32,6 +32,6 @@
   color: var(--info);
 }
 .ui-badge--orange {
-  background: #ffedd5;
-  color: #ea580c;
+  background: var(--orange-bg);
+  color: var(--orange-text);
 }

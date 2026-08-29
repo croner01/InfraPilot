@@ -19,7 +19,7 @@
   text-align: left;
 }
 .ui-process-group__head:hover {
-  background: #fafbfc;
+  background: var(--hover-bg);
 }
 .ui-process-group__title {
   font-weight: 600;

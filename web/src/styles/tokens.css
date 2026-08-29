@@ -33,6 +33,14 @@
   --radius-lg: 12px;
   --font-sans: 'IBM Plex Sans', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', sans-serif;
   --font-mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Consolas, Menlo, monospace;
+  --hover-bg: #fafbfc;
+  --scrollbar-thumb: #d8dde3;
+  --orange-bg: #ffedd5;
+  --orange-text: #ea580c;
+  --accent-soft-strong: #d3ebe8;
+  --alert-border: #f3cdcd;
+  --pill-border-warn: #f3dfc1;
+  --pill-border-danger: #f3cdcd;
 }
 
 /* 深色主题：M8 精调色值，此处先建立结构 */
@@ -58,4 +66,12 @@
   --info-soft: #17263d;
   --code-bg: #0b0e13;
   --code-text: #dbe4ef;
+  --hover-bg: #1f242e;
+  --scrollbar-thumb: #3a4150;
+  --orange-bg: #3a2c12;
+  --orange-text: #fbbf24;
+  --accent-soft-strong: #14504a;
+  --alert-border: #5a2426;
+  --pill-border-warn: #5a4a24;
+  --pill-border-danger: #5a2426;
 }

@@ -24,7 +24,7 @@ body {
   height: 9px;
 }
 ::-webkit-scrollbar-thumb {
-  background: #d8dde3;
+  background: var(--scrollbar-thumb);
   border-radius: 6px;
   border: 2px solid transparent;
   background-clip: content-box;

@@ -17,7 +17,7 @@
   border-bottom: none;
 }
 .alert-row:hover {
-  background: #fafbfc;
+  background: var(--hover-bg);
 }
 .alert-row__title {
   font-weight: 600;

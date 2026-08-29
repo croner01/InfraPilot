@@ -14,5 +14,5 @@
   transition: background 0.12s ease;
 }
 .ui-evidence-citation:hover {
-  background: #d3ebe8;
+  background: var(--accent-soft-strong);
 }

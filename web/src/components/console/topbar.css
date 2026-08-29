@@ -59,14 +59,14 @@
 }
 .ui-pill--warn {
   color: var(--warn);
-  border-color: #f3dfc1;
+  border-color: var(--pill-border-warn);
 }
 .ui-pill--warn .ui-pill__dot {
   background: var(--warn);
 }
 .ui-pill--danger {
   color: var(--danger);
-  border-color: #f3cdcd;
+  border-color: var(--pill-border-danger);
 }
 .ui-pill--danger .ui-pill__dot {
   background: var(--danger);
