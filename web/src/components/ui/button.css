@@ -1,0 +1,61 @@
+.ui-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+.ui-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+.ui-btn--md {
+  height: 32px;
+  padding: 0 14px;
+}
+.ui-btn--sm {
+  height: 26px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+.ui-btn--primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.ui-btn--primary:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+.ui-btn--secondary {
+  background: var(--panel);
+  border-color: var(--border);
+  color: var(--text);
+}
+.ui-btn--secondary:hover {
+  border-color: var(--border-strong);
+}
+.ui-btn--danger {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
+}
+.ui-btn--ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--text-2);
+}
+.ui-btn--ghost:hover {
+  background: var(--bg);
+  color: var(--text);
+}
+.ui-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
