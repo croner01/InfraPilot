@@ -3,7 +3,7 @@ import type { ReactNode } from 'react'
 import { Tabs } from '../ui/Tabs.js'
 import './right-panel.css'
 
-type PanelTab = 'process' | 'evidence' | 'object'
+export type PanelTab = 'process' | 'evidence' | 'object'
 
 const tabs: { key: PanelTab; label: string }[] = [
   { key: 'process', label: '调查过程' },
@@ -15,17 +15,29 @@ interface RightPanelProps {
   process: ReactNode
   evidence: ReactNode
   object: ReactNode
+  activeTab?: PanelTab
+  onTabChange?: (tab: PanelTab) => void
 }
 
-export function RightPanel({ process, evidence, object }: RightPanelProps) {
-  const [activeTab, setActiveTab] = useState<PanelTab>('process')
+export function RightPanel({ process, evidence, object, activeTab: controlledTab, onTabChange }: RightPanelProps) {
+  const [internalTab, setInternalTab] = useState<PanelTab>('process')
   const [collapsed, setCollapsed] = useState(false)
+  const activeTab = controlledTab ?? internalTab
   const content: Record<PanelTab, ReactNode> = { process, evidence, object }
+
+  const changeTab = (key: string) => {
+    const tab = key as PanelTab
+    if (onTabChange) {
+      onTabChange(tab)
+    } else {
+      setInternalTab(tab)
+    }
+  }
 
   return (
     <aside className={`ui-right-panel${collapsed ? ' ui-right-panel--collapsed' : ''}`}>
       <div className="ui-right-panel__head">
-        <Tabs items={tabs} activeKey={activeTab} onChange={(key) => setActiveTab(key as PanelTab)} />
+        <Tabs items={tabs} activeKey={activeTab} onChange={changeTab} />
         <button
           type="button"
           className="ui-right-panel__collapse"
