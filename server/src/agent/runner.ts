@@ -21,7 +21,8 @@ import { emitEvent, getSession, updateSession } from "./sessionStore.js";
 import { insertApproval, decideApproval as dbDecideApproval, getApproval } from "../db/db.js";
 import { saveCheckpoint, loadCheckpoint } from "./checkpoint.js";
 import { buildMemoryContext, extractAndStoreSessionMemory } from "./memoryStore.js";
-import { extractPlan, extractRemediation } from "./plan.js";
+import { extractPlan, extractRemediation, extractHypotheses } from "./plan.js";
+import { mergeHypotheses } from "./hypotheses.js";
 import {
   AgentCheckpoint,
   AgentSession,
@@ -401,6 +402,15 @@ async function processAssistantContent(sessionId: string, session: AgentSession,
       s.plan = plan;
     });
     emitEvent(sessionId, "plan_update", { plan });
+  }
+
+  const hypotheses = extractHypotheses(content);
+  if (hypotheses.length > 0) {
+    updateSession(sessionId, (s) => {
+      s.hypotheses = mergeHypotheses(s.hypotheses ?? [], hypotheses);
+    });
+    const updated = getSession(sessionId);
+    emitEvent(sessionId, "hypothesis_update", { hypotheses: updated?.hypotheses ?? [] });
   }
 
   const remediation = extractRemediation(content);
