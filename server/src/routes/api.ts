@@ -3,7 +3,7 @@ import { createSession, emitEvent, getSession, listSessionSummaries, deleteSessi
 import { startAgentTurn, resumeAgentTurn } from "../agent/orchestrator.js";
 import { getRealPodState, resetRealDemoScenario } from "../demo/realPodState.js";
 import { isAbnormalPod, listPods, readPod, listEventsForPod, type NormalizedPod } from "../skills/k8s/client.js";
-import { listAuditBySession, decideApproval, getApproval, listTimelineEvents } from "../db/db.js";
+import { listAuditBySession, decideApproval, getApproval, listTimelineEvents, listAlerts } from "../db/db.js";
 import { listKnowledgeCases, searchKnowledgeCases, getKnowledgeCase, addKnowledgeCase } from "../skills/knowledge/store.js";
 import { executeDrawioTool, type LogRelation } from "../skills/drawio/tools.js";
 import {
@@ -50,6 +50,30 @@ apiRouter.get("/sessions/:id/events", (req, res) => {
     payload: JSON.parse(r.payload),
   }));
   res.json(events);
+});
+
+apiRouter.get("/alerts", (req, res) => {
+  try {
+    const { status, severity } = req.query;
+    const rows = listAlerts({
+      status: status ? String(status) : undefined,
+      severity: severity ? String(severity) : undefined,
+    });
+    res.json({
+      alerts: rows.map((row) => ({
+        id: row.id,
+        severity: row.severity,
+        title: row.title,
+        source: row.source,
+        service: row.service,
+        status: row.status,
+        startedAt: row.started_at,
+        sessionId: row.session_id ?? undefined,
+      })),
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? String(err) });
+  }
 });
 
 apiRouter.patch("/sessions/:id", (req, res) => {
