@@ -1,6 +1,6 @@
 import './badge.css'
 
-export type BadgeTone = 'neutral' | 'accent' | 'success' | 'warn' | 'danger' | 'info'
+export type BadgeTone = 'neutral' | 'accent' | 'success' | 'warn' | 'danger' | 'info' | 'orange'
 
 interface BadgeProps {
   label: string

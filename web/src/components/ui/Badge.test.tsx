@@ -13,4 +13,9 @@ describe('Badge', () => {
     render(<Badge label="未处理" />)
     expect(screen.getByText('未处理').className).toContain('ui-badge--neutral')
   })
+
+  it('renders orange tone', () => {
+    render(<Badge label="high" tone="orange" />)
+    expect(screen.getByText('high').className).toContain('ui-badge--orange')
+  })
 })

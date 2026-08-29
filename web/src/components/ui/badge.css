@@ -31,3 +31,7 @@
   background: var(--info-soft);
   color: var(--info);
 }
+.ui-badge--orange {
+  background: #ffedd5;
+  color: #ea580c;
+}
