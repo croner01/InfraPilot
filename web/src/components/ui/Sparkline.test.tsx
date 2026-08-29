@@ -4,7 +4,7 @@ import { Sparkline } from './Sparkline.js'
 
 const { FakeUPlot, destroy } = vi.hoisted(() => {
   const destroy = vi.fn()
-  const FakeUPlot = vi.fn(function (this: { destroy: () => void }) {
+  const FakeUPlot = vi.fn(function (this: { destroy: () => void }, _opts: unknown, _data: unknown, _target: HTMLElement) {
     this.destroy = destroy
   })
   return { FakeUPlot, destroy }
@@ -27,7 +27,7 @@ describe('Sparkline', () => {
       />,
     )
     expect(FakeUPlot).toHaveBeenCalledTimes(1)
-    const [, data] = FakeUPlot.mock.calls[0]
+    const data = FakeUPlot.mock.calls[0][1] as unknown[]
     expect(data[0]).toEqual([1000, 2000])
     expect(data[1]).toEqual([1, 2])
   })

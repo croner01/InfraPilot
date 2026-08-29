@@ -141,3 +141,9 @@ export interface Alert {
   startedAt: string;
   sessionId?: string;
 }
+
+export interface LogEntry {
+  timestamp: string;
+  level: string;
+  message: string;
+}
