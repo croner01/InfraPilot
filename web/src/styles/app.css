@@ -4,36 +4,37 @@
    ============================================================================ */
 
 :root {
-  --bg-body: #f3f4f8;
-  --bg-panel: #ffffff;
-  --bg-card: #ffffff;
-  --bg-hover: #f7f7f9;
-  --bg-active: #f2efff;
+  /* 旧样式变量统一映射到新设计 token，深色主题自动跟随 */
+  --bg-body: var(--bg);
+  --bg-panel: var(--panel);
+  --bg-card: var(--panel);
+  --bg-hover: var(--hover-bg);
+  --bg-active: var(--accent-soft);
 
-  --text-primary: #1f2937;
-  --text-secondary: #6b7280;
-  --text-muted: #9ca3af;
+  --text-primary: var(--text);
+  --text-secondary: var(--text-2);
+  --text-muted: var(--text-3);
   --text-on-accent: #ffffff;
 
-  --border-color: #e5e7eb;
-  --divider: #f3f4f6;
+  --border-color: var(--border);
+  --divider: var(--bg);
 
-  --accent-primary: #7c3aed;
-  --accent-primary-hover: #6d28d9;
-  --accent-primary-light: #ede9fe;
-  --accent-glow: rgba(124, 58, 237, 0.18);
-  --accent-danger: #ef4444;
-  --accent-danger-hover: #dc2626;
-  --accent-success: #10b981;
-  --accent-success-light: #d1fae5;
-  --accent-warning: #f59e0b;
-  --accent-warning-light: #fef3c7;
-  --accent-info: #3b82f6;
-  --accent-info-light: #dbeafe;
+  --accent-primary: var(--accent);
+  --accent-primary-hover: var(--accent-hover);
+  --accent-primary-light: var(--accent-soft);
+  --accent-glow: rgba(15, 118, 110, 0.18);
+  --accent-danger: var(--danger);
+  --accent-danger-hover: #b91c1c;
+  --accent-success: var(--success);
+  --accent-success-light: var(--success-soft);
+  --accent-warning: var(--warn);
+  --accent-warning-light: var(--warn-soft);
+  --accent-info: var(--info);
+  --accent-info-light: var(--info-soft);
 
-  --radius-sm: 8px;
-  --radius-md: 12px;
-  --radius-lg: 16px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
 
   --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.02);
   --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.06), 0 2px 4px rgba(0, 0, 0, 0.02);
@@ -678,7 +679,7 @@ body {
 }
 
 .timeline-item__pre {
-  background: #f9fafb;
+  background: var(--bg);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
   padding: 12px;
@@ -709,7 +710,7 @@ body {
 }
 
 .timeline-item__code {
-  background: #f9fafb;
+  background: var(--bg);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
   padding: 12px 14px;
@@ -731,7 +732,7 @@ body {
 }
 
 .timeline-item__diff {
-  background: #f9fafb;
+  background: var(--bg);
   border-left: 3px solid var(--accent-warning);
   padding: 10px 12px;
   border-radius: var(--radius-sm);
@@ -3058,7 +3059,7 @@ body {
 }
 
 .evidence-card__content {
-  background: #f9fafb;
+  background: var(--bg);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
   padding: 12px 14px;
@@ -3194,7 +3195,7 @@ body {
 }
 
 .remediation-step__args {
-  background: #f9fafb;
+  background: var(--bg);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
   padding: 12px 14px;
@@ -3405,7 +3406,7 @@ body {
 }
 
 .approval-card__diff {
-  background: #f9fafb;
+  background: var(--bg);
   border-left: 3px solid var(--accent-warning);
   padding: 10px 12px;
   border-radius: var(--radius-sm);
