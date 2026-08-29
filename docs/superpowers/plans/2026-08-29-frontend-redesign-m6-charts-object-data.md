@@ -112,9 +112,13 @@ Create `server/src/routes/objects.test.ts`:
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import express from "express";
 
-vi.mock("../skills/elk/tools.js", () => ({
-  executeElkTool: vi.fn(),
-}));
+vi.mock("../skills/elk/tools.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../skills/elk/tools.js")>();
+  return {
+    ...actual,
+    executeElkTool: vi.fn(),
+  };
+});
 
 import { executeElkTool } from "../skills/elk/tools.js";
 import { apiRouter } from "./api.js";
@@ -663,7 +667,9 @@ export function ObjectContext({ alerts, onDiagnose }: ObjectContextProps) {
   if (!selected) return <p className="object-context__state">集群中暂无 Pod</p>
 
   const memoryLimit = selected.resources?.limits?.memory ?? '-'
-  const relatedAlerts = alerts.filter((alert) => alert.service === selected.name)
+  const relatedAlerts = alerts.filter(
+    (alert) => selected.name === alert.service || selected.name.startsWith(`${alert.service}-`),
+  )
   const now = Date.now()
   const memoryPoints: [number, number][] = Array.from({ length: 12 }, (_, i) => [now - (11 - i) * 60_000, 30 + i * 3 + (i % 3) * 2])
   const cpuPoints: [number, number][] = Array.from({ length: 12 }, (_, i) => [now - (11 - i) * 60_000, 20 + (i % 4) * 4])
