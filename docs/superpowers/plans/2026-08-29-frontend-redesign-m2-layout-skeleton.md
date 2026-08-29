@@ -292,7 +292,7 @@ describe('SessionList', () => {
     render(
       <SessionList
         activeSessions={[makeSession({})]}
-        closedSessions={[makeSession({ id: 's2', status: 'closed' })]}
+        closedSessions={[makeSession({ id: 's2', title: 'node-08 磁盘排查', status: 'closed' })]}
         currentId="s1"
         search=""
         onSearch={() => {}}
@@ -1792,7 +1792,7 @@ describe('Workspace', () => {
   it('renders children in workspace container', () => {
     render(<Workspace>内容</Workspace>)
     expect(screen.getByText('内容')).toBeInTheDocument()
-    expect(screen.getByText('内容').parentElement?.className).toContain('ui-workspace')
+    expect(screen.getByText('内容').className).toContain('ui-workspace')
   })
 })
 ```

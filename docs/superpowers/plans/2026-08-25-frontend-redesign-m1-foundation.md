@@ -75,6 +75,12 @@ Create `web/src/test/setup.ts`:
 
 ```ts
 import '@testing-library/jest-dom/vitest'
+import { cleanup } from '@testing-library/react'
+import { afterEach } from 'vitest'
+
+afterEach(() => {
+  cleanup()
+})
 ```
 
 - [ ] **Step 3: 替换 vite.config.ts 增加 test 配置**
