@@ -482,6 +482,7 @@ Create `web/src/components/console/SessionList.stories.tsx`:
 ```tsx
 import type { Meta, StoryObj } from '@storybook/react-vite'
 import { SessionList } from './SessionList.js'
+import type { SessionStatus } from '../../lib/types.js'
 
 const meta: Meta<typeof SessionList> = {
   title: 'console/SessionList',
@@ -490,7 +491,7 @@ const meta: Meta<typeof SessionList> = {
 export default meta
 type Story = StoryObj<typeof SessionList>
 
-const makeSession = (id: string, title: string, status: string) => ({
+const makeSession = (id: string, title: string, status: SessionStatus) => ({
   id,
   title,
   status,
