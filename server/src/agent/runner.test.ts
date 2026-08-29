@@ -113,6 +113,7 @@ function makeSession(id: string): AgentSession {
     updatedAt: new Date().toISOString(),
     plan: [],
     evidence: [],
+    hypotheses: [],
     pendingToolCalls: [],
     executedToolCalls: [],
     iteration: 0,

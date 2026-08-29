@@ -53,6 +53,7 @@ const sessionForSkills = {
   updatedAt: new Date().toISOString(),
   plan: [],
   evidence: [],
+  hypotheses: [],
   pendingToolCalls: [],
   executedToolCalls: [],
   iteration: 0,
