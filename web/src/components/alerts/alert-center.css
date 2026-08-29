@@ -41,3 +41,12 @@
   font-size: 12px;
   color: var(--text-3);
 }
+.alert-center__state {
+  color: var(--text-3);
+  font-size: 13px;
+  padding: 24px 0;
+  text-align: center;
+}
+.alert-center__state--error {
+  color: var(--danger);
+}
