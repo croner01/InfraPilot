@@ -33,10 +33,10 @@ Expected: `package.json` 的 `dependencies` 增加 9 项：react-markdown、rema
 - [ ] **Step 2: 安装开发依赖**
 
 ```bash
-npm install -D vitest jsdom @testing-library/react @testing-library/jest-dom @testing-library/user-event storybook @storybook/react-vite @storybook/addon-essentials
+npm install -D vitest jsdom @testing-library/react @testing-library/jest-dom @testing-library/user-event storybook@^10 @storybook/react-vite@^10
 ```
 
-Expected: `devDependencies` 增加 9 项。
+Expected: `devDependencies` 增加 8 项。（注：本环境 registry 的 `@storybook/addon-essentials` 无 10.x 稳定版，Storybook 10 已内置核心 addon，故省略。）
 
 - [ ] **Step 3: Commit**
 
@@ -1013,25 +1013,28 @@ git commit -m "feat(web): add Tabs component"
 Create `web/src/components/ui/CodeBlock.test.tsx`:
 
 ```tsx
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { render, screen, fireEvent } from '@testing-library/react'
 import { CodeBlock } from './CodeBlock.js'
 
 describe('CodeBlock', () => {
   beforeEach(() => {
-    Object.assign(navigator, {
-      clipboard: { writeText: vi.fn().mockResolvedValue(undefined) },
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText: vi.fn().mockResolvedValue(undefined) },
+      configurable: true,
     })
   })
 
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
   it('renders code and copies to clipboard', async () => {
-    const user = userEvent.setup()
     render(<CodeBlock code="kubectl get pods" language="bash" />)
     expect(screen.getByText('kubectl get pods')).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: '复制' }))
+    fireEvent.click(screen.getByRole('button', { name: '复制' }))
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith('kubectl get pods')
-    expect(screen.getByRole('button', { name: '已复制' })).toBeInTheDocument()
+    await screen.findByRole('button', { name: '已复制' })
   })
 })
 ```
@@ -1181,7 +1184,6 @@ import type { StorybookConfig } from '@storybook/react-vite'
 
 const config: StorybookConfig = {
   stories: ['../src/**/*.stories.@(ts|tsx)'],
-  addons: ['@storybook/addon-essentials'],
   framework: {
     name: '@storybook/react-vite',
     options: {},
