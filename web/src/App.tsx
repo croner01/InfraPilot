@@ -2,19 +2,14 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import {
   createSession,
   fetchSessionEvents,
-  getPodDetail,
   getSession,
-  listPods,
   listSessions,
-  resetDemoScenario,
   sendMessage,
   fetchAlerts,
   deleteSession,
   updateSessionTitle,
   decideApproval,
   wsUrl,
-  type PodInfo,
-  type PodEvent,
 } from "./lib/api.js";
 import { SessionDetailTabs, type DetailTab } from "./components/SessionDetailTabs.js";
 import { KnowledgePage } from "./components/KnowledgePage.js";
@@ -29,6 +24,7 @@ import { Workspace } from "./components/console/Workspace.js";
 import { RightPanel, type PanelTab } from "./components/console/RightPanel.js";
 import { ConclusionCard } from "./components/conclusion/ConclusionCard.js";
 import { EvidenceList } from "./components/panels/EvidenceList.js";
+import { ObjectContext } from "./components/panels/ObjectContext.js";
 import { AlertCenter } from "./components/alerts/AlertCenter.js";
 import { Conversation } from "./components/conversation/Conversation.js";
 import { EmptyWorkspace } from "./components/conversation/EmptyWorkspace.js";
@@ -340,7 +336,15 @@ export default function App() {
             onTabChange={setRightTab}
             process={<p className="ui-rp-placeholder">调查过程：M7 接入推理树</p>}
             evidence={<EvidenceList evidence={currentSession.evidence} highlightId={highlightEvidenceId} />}
-            object={<ContextPanel />}
+            object={
+              <ObjectContext
+                alerts={alerts}
+                onDiagnose={() => {
+                  setCurrentView("sessions");
+                  if (!currentId) handleCreate();
+                }}
+              />
+            }
           />
         )}
       </div>
@@ -593,204 +597,3 @@ function ApprovalCard({
   );
 }
 
-function ContextPanel() {
-  return (
-    <aside className="context-panel">
-      <div className="context-panel__header">Pod 上下文</div>
-      <div className="context-panel__body">
-        <PodContext />
-      </div>
-    </aside>
-  );
-}
-
-function PodContext() {
-  const [pods, setPods] = useState<PodInfo[]>([]);
-  const [selected, setSelected] = useState<PodInfo | null>(null);
-  const [events, setEvents] = useState<PodEvent[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [detailLoading, setDetailLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const isOrderApiDemo = selected?.name.startsWith("order-api") && selected?.namespace === "order-service";
-
-  const loadPods = async () => {
-    setLoading(true);
-    setError(null);
-    const abnormal = await listPods(undefined, true);
-    let target = abnormal?.pods ?? [];
-    if (target.length === 0) {
-      const all = await listPods();
-      target = all?.pods ?? [];
-    }
-    setPods(target);
-    if (target.length > 0 && !selected) {
-      await selectPod(target[0]);
-    }
-    setLoading(false);
-  };
-
-  const selectPod = async (pod: PodInfo) => {
-    setSelected(pod);
-    setDetailLoading(true);
-    const detail = await getPodDetail(pod.namespace, pod.name);
-    if (detail) {
-      setSelected(detail.pod);
-      setEvents(detail.events);
-    }
-    setDetailLoading(false);
-  };
-
-  const reset = async () => {
-    await resetDemoScenario();
-    await loadPods();
-  };
-
-  useEffect(() => {
-    loadPods();
-  }, []);
-
-  if (loading) return <Skeleton />;
-  if (error) return <EmptyState icon="⚠️" message={error} />;
-  if (pods.length === 0) return <EmptyState icon="☁" message="集群中暂无 Pod" />;
-  if (!selected) return <EmptyState icon="☁" message="请选择 Pod" />;
-
-  const memoryLimit = selected.resources?.limits?.memory ?? "-";
-  const memoryRequest = selected.resources?.requests?.memory ?? "-";
-  const cpuLimit = selected.resources?.limits?.cpu ?? "-";
-  const cpuRequest = selected.resources?.requests?.cpu ?? "-";
-
-  return (
-    <div className="pod-context">
-      <div className="pod-context__selector">
-        <label className="pod-context__selector-label">当前 Pod</label>
-        <select
-          className="input input--sm"
-          value={`${selected.namespace}/${selected.name}`}
-          onChange={(e) => {
-            const [ns, name] = e.target.value.split("/");
-            const pod = pods.find((p) => p.namespace === ns && p.name === name);
-            if (pod) selectPod(pod);
-          }}
-        >
-          {pods.map((p) => (
-            <option key={`${p.namespace}/${p.name}`} value={`${p.namespace}/${p.name}`}>
-              {p.namespace}/{p.name} ({p.status})
-            </option>
-          ))}
-        </select>
-      </div>
-
-      <div className="pod-context__header">
-        <h3>{selected.name}</h3>
-        <div className={classNames("status-dot", selected.status === "Running" && selected.ready ? "status-dot--success" : "status-dot--error")}>
-          {selected.status}
-        </div>
-      </div>
-
-      {detailLoading ? (
-        <Skeleton />
-      ) : (
-        <>
-          <div className="pod-context__grid">
-            <div className="pod-context__field">
-              <span className="pod-context__label">命名空间</span>
-              <span className="pod-context__value">{selected.namespace}</span>
-            </div>
-            <div className="pod-context__field">
-              <span className="pod-context__label">节点</span>
-              <span className="pod-context__value">{selected.nodeName ?? "-"}</span>
-            </div>
-            <div className="pod-context__field">
-              <span className="pod-context__label">Pod IP</span>
-              <span className="pod-context__value">{selected.podIp ?? "-"}</span>
-            </div>
-            <div className="pod-context__field">
-              <span className="pod-context__label">启动时间</span>
-              <span className="pod-context__value">{selected.startedAt ? new Date(selected.startedAt).toLocaleString("zh-CN") : "-"}</span>
-            </div>
-            <div className="pod-context__field">
-              <span className="pod-context__label">重启次数</span>
-              <span className={classNames("pod-context__value", selected.restartCount > 0 && "pod-context__value--danger")}>
-                {selected.restartCount}
-              </span>
-            </div>
-            <div className="pod-context__field">
-              <span className="pod-context__label">就绪</span>
-              <span className="pod-context__value">{selected.ready ? "是" : "否"}</span>
-            </div>
-            <div className="pod-context__field">
-              <span className="pod-context__label">CPU 限制 / 请求</span>
-              <span className="pod-context__value">{cpuLimit} / {cpuRequest}</span>
-            </div>
-            <div className="pod-context__field">
-              <span className="pod-context__label">内存 限制 / 请求</span>
-              <span className="pod-context__value">{memoryLimit} / {memoryRequest}</span>
-            </div>
-          </div>
-
-          {selected.lastState && (
-            <div className="pod-context__last-state">
-              <div className="pod-context__section-title">上次终止状态</div>
-              <div className="pod-context__field">
-                <span className="pod-context__label">原因</span>
-                <span className="pod-context__value pod-context__value--danger">{selected.lastState.reason}</span>
-              </div>
-              <div className="pod-context__field">
-                <span className="pod-context__label">退出码</span>
-                <span className="pod-context__value">{selected.lastState.exitCode}</span>
-              </div>
-              <div className="pod-context__field">
-                <span className="pod-context__label">终止时间</span>
-                <span className="pod-context__value">{new Date(selected.lastState.finishedAt).toLocaleString("zh-CN")}</span>
-              </div>
-            </div>
-          )}
-
-          <div className="pod-context__events">
-            <div className="pod-context__section-title">最近事件</div>
-            {events.length === 0 ? (
-              <div className="pod-context__empty">无事件</div>
-            ) : (
-              events.map((e, i) => (
-                <div key={i} className={classNames("pod-context__event", e.type === "Warning" && "pod-context__event--warning")}>
-                  <span className="pod-context__event-time">{new Date(e.time).toLocaleString("zh-CN")}</span>
-                  <span className={classNames("pod-context__event-type", e.type === "Warning" ? "pod-context__event-type--warning" : "pod-context__event-type--normal")}>
-                    {e.type}
-                  </span>
-                  <span className="pod-context__event-reason">{e.reason}</span>
-                  <span className="pod-context__event-message">{e.message}</span>
-                </div>
-              ))
-            )}
-          </div>
-
-          {isOrderApiDemo && (
-            <button className="btn btn--secondary btn--full" onClick={reset}>
-              重置演示场景
-            </button>
-          )}
-        </>
-      )}
-    </div>
-  );
-}
-
-function EmptyState({ icon, message }: { icon: string; message: string }) {
-  return (
-    <div className="empty-state">
-      <div className="empty-state__icon">{icon}</div>
-      <div className="empty-state__message">{message}</div>
-    </div>
-  );
-}
-
-function Skeleton() {
-  return (
-    <div className="skeleton-list">
-      <div className="skeleton-row" />
-      <div className="skeleton-row" />
-      <div className="skeleton-row" />
-    </div>
-  );
-}
