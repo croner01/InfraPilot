@@ -1,8 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import {
   createSession,
-  downloadDrawioUrl,
-  exportDrawioDiagram,
   fetchSessionEvents,
   getPodDetail,
   getSession,
@@ -22,7 +20,6 @@ import { KnowledgePage } from "./components/KnowledgePage.js";
 import { TopologyPage } from "./components/TopologyPage.js";
 import { SettingsPage } from "./components/SettingsPage.js";
 import { SkillsPage } from "./components/SkillsPage.js";
-import { DrawioImageViewer } from "./components/DrawioImageViewer.js";
 import type { AgentSession, TimelineEvent } from "./lib/types.js";
 import "./styles/app.css";
 import { TopBar } from "./components/console/TopBar.js";
@@ -30,6 +27,8 @@ import { SideNav } from "./components/console/SideNav.js";
 import { Workspace } from "./components/console/Workspace.js";
 import { RightPanel } from "./components/console/RightPanel.js";
 import { AlertCenter } from "./components/alerts/AlertCenter.js";
+import { Conversation } from "./components/conversation/Conversation.js";
+import { EmptyWorkspace } from "./components/conversation/EmptyWorkspace.js";
 import type { ViewKey } from "./lib/view.js";
 
 type MainTab = "timeline" | "evidence" | "plan" | "remediation" | "audit";
@@ -242,10 +241,10 @@ export default function App() {
                 </div>
                 <div className="main__content">
                   {mainTab === "timeline" ? (
-                    <ChatArea
+                    <Conversation
                       events={events}
                       loading={loading && events.length === 0}
-                      onApprove={handleApprove}
+                      renderSpecial={(event) => <EventCard event={event} onApprove={handleApprove} />}
                       chatEndRef={chatEndRef}
                     />
                   ) : (
@@ -378,175 +377,10 @@ function SessionHeader({
   );
 }
 
-function ChatArea({
-  events,
-  loading,
-  onApprove,
-  chatEndRef,
-}: {
-  events: TimelineEvent[];
-  loading: boolean;
-  onApprove: (id: string, approved: boolean) => void;
-  chatEndRef: React.RefObject<HTMLDivElement | null>;
-}) {
-  return (
-    <div className="chat-area">
-      {events.length === 0 && !loading && (
-        <div className="chat-empty">
-          <div className="chat-empty__orb" />
-          <div className="chat-empty__title">等待开始</div>
-          <div className="chat-empty__hint">在下方输入故障现象，AI Agent 将自动诊断并收集证据。</div>
-        </div>
-      )}
-      {events.map((ev) => (
-        <EventCard key={ev.id} event={ev} onApprove={onApprove} />
-      ))}
-      {loading && (
-        <div className="typing">
-          <div className="typing__dots">
-            <span />
-            <span />
-            <span />
-          </div>
-          <span className="typing__text">Agent 正在思考...</span>
-        </div>
-      )}
-      <div ref={chatEndRef} />
-    </div>
-  );
-}
-
-function DrawioResultCard({ result, args }: { result: any; args?: Record<string, unknown> }) {
-  const [preview, setPreview] = useState<string | null>(null);
-
-  if (!result?.success) {
-    return (
-      <div className="timeline-item__text timeline-item__text--error">
-        生成失败: {result?.error || "未知错误"}
-      </div>
-    );
-  }
-
-  const data = result.data || {};
-  const outputPath = data.output_path as string | undefined;
-  const format = data.format as string | undefined;
-  const nodeCount = data.node_count as number | undefined;
-  const edgeCount = data.edge_count as number | undefined;
-  const isExport = !!format && outputPath?.endsWith(`.${format}`);
-  const title = (args?.title as string) || (isExport ? "流程图导出" : "流程图生成");
-
-  useEffect(() => {
-    if (!outputPath) return;
-    if (isExport && (format === "png" || format === "svg")) {
-      setPreview(downloadDrawioUrl(outputPath));
-      return;
-    }
-    if (outputPath.endsWith(".drawio")) {
-      exportDrawioDiagram(outputPath, "png").then((res) => {
-        if (res) setPreview(`data:image/png;base64,${res.data}`);
-      });
-    }
-  }, [outputPath, format, isExport]);
-
-  return (
-    <div className="drawio-result-card">
-      <div className="drawio-result-card__title">{title}</div>
-      {(nodeCount !== undefined || edgeCount !== undefined) && (
-        <div className="drawio-result-card__meta">
-          {nodeCount !== undefined && <span>节点: {nodeCount}</span>}
-          {edgeCount !== undefined && <span>边: {edgeCount}</span>}
-        </div>
-      )}
-      {outputPath && (
-        <div className="drawio-result-card__actions">
-          {preview && (
-            <DrawioImageViewer
-              src={preview}
-              alt={title}
-              className="drawio-result-card__preview"
-              caption="点击预览可全屏缩放"
-            />
-          )}
-          <a
-            className="btn btn--sm btn--secondary"
-            href={downloadDrawioUrl(outputPath)}
-            download={outputPath.split("/").pop()}
-          >
-            下载 {isExport ? `.${format}` : ".drawio"}
-          </a>
-        </div>
-      )}
-    </div>
-  );
-}
-
 function EventCard({ event, onApprove }: { event: TimelineEvent; onApprove: (id: string, approved: boolean) => void }) {
   const p = event.payload || {};
 
   switch (event.type) {
-    case "user_message":
-      return (
-        <div className="message message--user">
-          <div className="message__bubble">{p.message || p.content || "用户消息"}</div>
-          <div className="message__time">{formatTime(event.timestamp)}</div>
-        </div>
-      );
-    case "assistant_message":
-      return (
-        <div className="message message--assistant">
-          <div className="message__avatar">AI</div>
-          <div>
-            <div className="message__bubble" dangerouslySetInnerHTML={{ __html: formatMarkdown(p.content || "") }} />
-            <div className="message__time">{formatTime(event.timestamp)}</div>
-          </div>
-        </div>
-      );
-    case "status":
-      return (
-        <div className="timeline-item timeline-item--status">
-          <div className="timeline-item__icon">ℹ</div>
-          <div className="timeline-item__body">
-            <div className="timeline-item__title">状态更新</div>
-            <div className="timeline-item__text">{p.message || p.status}</div>
-          </div>
-          <div className="timeline-item__time">{formatTime(event.timestamp)}</div>
-        </div>
-      );
-    case "tool_call_start":
-      return (
-        <div className="timeline-item timeline-item--tool">
-          <div className="timeline-item__icon">🔧</div>
-          <div className="timeline-item__body">
-            <div className="timeline-item__title">
-              {p.skill}.{p.tool}()
-            </div>
-            <div className="timeline-item__text">
-              风险等级: <span className={`risk-badge risk-badge--${p.risk?.level}`}>{p.risk?.level}</span>
-            </div>
-            {p.args && Object.keys(p.args).length > 0 && (
-              <pre className="timeline-item__code">{JSON.stringify(p.args, null, 2)}</pre>
-            )}
-          </div>
-          <div className="timeline-item__time">{formatTime(event.timestamp)}</div>
-        </div>
-      );
-    case "tool_call_result":
-      return (
-        <div className="timeline-item timeline-item--result">
-          <div className="timeline-item__icon">{p.result?.success ? "✅" : "❌"}</div>
-          <div className="timeline-item__body">
-            <div className="timeline-item__title">工具执行结果</div>
-            {p.skill === "drawio" ? (
-              <DrawioResultCard result={p.result} args={p.args} />
-            ) : (
-              <pre className="timeline-item__code timeline-item__code--compact">
-                {JSON.stringify(p.result, null, 2)}
-              </pre>
-            )}
-          </div>
-          <div className="timeline-item__time">{formatTime(event.timestamp)}</div>
-        </div>
-      );
     case "approval_request":
       return (
         <ApprovalCard
@@ -568,37 +402,6 @@ function EventCard({ event, onApprove }: { event: TimelineEvent; onApprove: (id:
             <div className="timeline-item__text">
               {p.decision === "approved" ? "已批准" : "已拒绝"} {p.approvedBy ? `(${p.approvedBy})` : ""}
             </div>
-          </div>
-          <div className="timeline-item__time">{formatTime(event.timestamp)}</div>
-        </div>
-      );
-    case "evidence_added":
-      return (
-        <div className="timeline-item timeline-item--evidence">
-          <div className="timeline-item__icon">🔍</div>
-          <div className="timeline-item__body">
-            <div className="timeline-item__title">新增证据</div>
-            <div className="timeline-item__text">{p.summary}</div>
-            {p.content && (
-              <pre className="timeline-item__code timeline-item__code--compact">
-                {typeof p.content === "string" ? p.content : JSON.stringify(p.content, null, 2)}
-              </pre>
-            )}
-          </div>
-          <div className="timeline-item__time">{formatTime(event.timestamp)}</div>
-        </div>
-      );
-    case "plan_update":
-      return (
-        <div className="timeline-item timeline-item--plan">
-          <div className="timeline-item__icon">📋</div>
-          <div className="timeline-item__body">
-            <div className="timeline-item__title">诊断计划更新</div>
-            <ol className="timeline-item__list">
-              {(Array.isArray(p.plan) ? p.plan : []).map((step: string, i: number) => (
-                <li key={i}>{step}</li>
-              ))}
-            </ol>
           </div>
           <div className="timeline-item__time">{formatTime(event.timestamp)}</div>
         </div>
@@ -916,24 +719,6 @@ function PodContext() {
   );
 }
 
-function EmptyWorkspace({ onNewSession }: { onNewSession: () => void }) {
-  return (
-    <div className="empty-workspace">
-      <div className="empty-workspace__orb" />
-      <h2 className="empty-workspace__title">开始一次智能诊断</h2>
-      <p className="empty-workspace__desc">创建新会话，描述故障现象，让 AI Agent 自动收集证据、分析根因并给出修复建议。</p>
-      <button className="btn btn--primary btn--lg" onClick={onNewSession}>
-        + 新建会话
-      </button>
-      <div className="empty-workspace__examples">
-        <div className="example-chip">order-api Pod OOMKilled</div>
-        <div className="example-chip">OpenStack 创建虚机失败</div>
-        <div className="example-chip">MySQL 磁盘空间不足</div>
-      </div>
-    </div>
-  );
-}
-
 function EmptyState({ icon, message }: { icon: string; message: string }) {
   return (
     <div className="empty-state">
@@ -951,15 +736,4 @@ function Skeleton() {
       <div className="skeleton-row" />
     </div>
   );
-}
-
-function formatMarkdown(text: string): string {
-  return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/```([\s\S]*?)```/g, "<pre><code>$1</code></pre>")
-    .replace(/`([^`]+)`/g, "<code>$1</code>")
-    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
-    .replace(/\n/g, "<br />");
 }
