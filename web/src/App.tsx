@@ -25,31 +25,14 @@ import { SkillsPage } from "./components/SkillsPage.js";
 import { DrawioImageViewer } from "./components/DrawioImageViewer.js";
 import type { AgentSession, TimelineEvent } from "./lib/types.js";
 import "./styles/app.css";
+import { TopBar } from "./components/console/TopBar.js";
+import { SideNav } from "./components/console/SideNav.js";
+import { Workspace } from "./components/console/Workspace.js";
+import { RightPanel } from "./components/console/RightPanel.js";
+import { AlertCenter } from "./components/alerts/AlertCenter.js";
+import type { ViewKey } from "./lib/view.js";
 
-type View = "sessions" | "knowledge" | "topology" | "settings" | "skills";
 type MainTab = "timeline" | "evidence" | "plan" | "remediation" | "audit";
-
-const statusText: Record<string, string> = {
-  intake: "接收中",
-  planning: "分析规划",
-  executing: "执行中",
-  awaiting_approval: "等待审批",
-  reflecting: "反思中",
-  concluded: "已得出结论",
-  remediating: "修复中",
-  closed: "已关闭",
-};
-
-const statusClass: Record<string, string> = {
-  intake: "status--intake",
-  planning: "status--planning",
-  executing: "status--executing",
-  awaiting_approval: "status--warning",
-  reflecting: "status--planning",
-  concluded: "status--success",
-  remediating: "status--executing",
-  closed: "status--closed",
-};
 
 function classNames(...arr: (string | false | undefined)[]) {
   return arr.filter(Boolean).join(" ");
@@ -68,7 +51,7 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [connected, setConnected] = useState(false);
   const [mainTab, setMainTab] = useState<MainTab>("timeline");
-  const [currentView, setCurrentView] = useState<View>("sessions");
+  const [currentView, setCurrentView] = useState<ViewKey>("alerts");
   const [toasts, setToasts] = useState<{ id: string; message: string; type: "error" | "success" }[]>([]);
   const wsRef = useRef<WebSocket | null>(null);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
@@ -200,31 +183,44 @@ export default function App() {
   const activeSessions = filteredSessions.filter((s) => s.status !== "closed");
   const closedSessions = filteredSessions.filter((s) => s.status === "closed");
 
+  const pendingApprovals = sessions.reduce((count, session) => count + session.pendingToolCalls.length, 0);
+  // M2 静态占位；M5 接入 /api/alerts 后替换
+  const activeAlerts = 3;
+
+  const handleInvestigateAlert = (_alertId: string) => {
+    setCurrentView("sessions");
+    if (!currentId) handleCreate();
+  };
+
   return (
     <div className="app">
       <TopBar
         connected={connected}
+        pendingApprovals={pendingApprovals}
+        activeAlerts={activeAlerts}
         onNewSession={() => {
           setCurrentView("sessions");
           handleCreate();
         }}
       />
       <div className="app__body">
-        <Sidebar
-          search={search}
-          onSearch={setSearch}
+        <SideNav
+          activeView={currentView}
+          alertCount={activeAlerts}
+          onNavigate={setCurrentView}
           activeSessions={activeSessions}
           closedSessions={closedSessions}
           currentId={currentId}
-          currentView={currentView}
-          onViewChange={setCurrentView}
+          search={search}
+          onSearch={setSearch}
           onSelect={handleSelect}
           onDelete={handleDelete}
           onTitleSave={handleTitleSave}
         />
-        <main className="main">
-          {currentView === "sessions" && (
-            currentSession ? (
+        <Workspace>
+          {currentView === "alerts" && <AlertCenter onInvestigate={handleInvestigateAlert} />}
+          {currentView === "sessions" &&
+            (currentSession ? (
               <>
                 <SessionHeader session={currentSession} onTitleSave={handleTitleSave} onDelete={handleDelete} />
                 <div className="main__tabs">
@@ -278,14 +274,19 @@ export default function App() {
               </>
             ) : (
               <EmptyWorkspace onNewSession={handleCreate} />
-            )
-          )}
+            ))}
           {currentView === "knowledge" && <KnowledgePage notify={notify} />}
           {currentView === "topology" && <TopologyPage />}
           {currentView === "settings" && <SettingsPage notify={notify} />}
           {currentView === "skills" && <SkillsPage notify={notify} />}
-        </main>
-        {currentView === "sessions" && <ContextPanel />}
+        </Workspace>
+        {currentView === "sessions" && currentSession && (
+          <RightPanel
+            process={<p className="ui-rp-placeholder">调查过程：M3 接入工具记录，M7 接入推理树</p>}
+            evidence={<p className="ui-rp-placeholder">证据链：{currentSession.evidence.length} 条证据（M3 渲染列表）</p>}
+            object={<ContextPanel />}
+          />
+        )}
       </div>
       <div className="toast-stack">
         {toasts.map((t) => (
@@ -293,193 +294,6 @@ export default function App() {
             {t.message}
           </div>
         ))}
-      </div>
-    </div>
-  );
-}
-
-function TopBar({ connected, onNewSession }: { connected: boolean; onNewSession: () => void }) {
-  return (
-    <header className="topbar">
-      <div className="topbar__brand">
-        <div className="topbar__logo">
-          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        </div>
-        <span className="topbar__title">InfraPilot</span>
-        <span className="topbar__subtitle">AI SRE 智能运维助手</span>
-      </div>
-      <div className="topbar__actions">
-        <div className={classNames("connection-pill", connected ? "connection-pill--online" : "connection-pill--offline")}>
-          <span className="connection-pill__dot" />
-          {connected ? "实时连接" : "未连接"}
-        </div>
-        <button className="topbar__new-btn" onClick={onNewSession}>
-          + 新建会话
-        </button>
-      </div>
-    </header>
-  );
-}
-
-function Sidebar({
-  search,
-  onSearch,
-  activeSessions,
-  closedSessions,
-  currentId,
-  currentView,
-  onViewChange,
-  onSelect,
-  onDelete,
-  onTitleSave,
-}: {
-  search: string;
-  onSearch: (v: string) => void;
-  activeSessions: AgentSession[];
-  closedSessions: AgentSession[];
-  currentId: string | null;
-  currentView: View;
-  onViewChange: (v: View) => void;
-  onSelect: (id: string) => void;
-  onDelete: (id: string) => void;
-  onTitleSave: (id: string, title: string) => void;
-}) {
-  const navItems: { key: View; label: string; icon: string }[] = [
-    { key: "sessions", label: "会话中心", icon: "💬" },
-    { key: "knowledge", label: "知识库", icon: "📚" },
-    { key: "topology", label: "拓扑", icon: "🌐" },
-    { key: "skills", label: "技能", icon: "🧩" },
-    { key: "settings", label: "设置", icon: "⚙️" },
-  ];
-
-  return (
-    <aside className="sidebar">
-      <nav className="sidebar__nav">
-        <div className="sidebar__group-title">功能导航</div>
-        <ul className="sidebar__nav-list">
-          {navItems.map((item) => (
-            <li key={item.key}>
-              <button
-                className={classNames("sidebar__nav-item", currentView === item.key && "active")}
-                onClick={() => onViewChange(item.key)}
-              >
-                <span className="sidebar__nav-icon">{item.icon}</span>
-                {item.label}
-              </button>
-            </li>
-          ))}
-        </ul>
-      </nav>
-
-      {currentView === "sessions" && (
-        <>
-          <div className="sidebar__search">
-            <svg className="sidebar__search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="11" cy="11" r="8" />
-              <path d="M21 21l-4.35-4.35" />
-            </svg>
-            <input
-              type="text"
-              placeholder="搜索会话..."
-              value={search}
-              onChange={(e) => onSearch(e.target.value)}
-            />
-          </div>
-          <div className="sidebar__content">
-            <div className="sidebar__section">
-              <div className="sidebar__section-title">进行中 ({activeSessions.length})</div>
-              {activeSessions.map((s) => (
-                <SessionItem
-                  key={s.id}
-                  session={s}
-                  active={s.id === currentId}
-                  onSelect={() => onSelect(s.id)}
-                  onDelete={() => onDelete(s.id)}
-                  onTitleSave={(title) => onTitleSave(s.id, title)}
-                />
-              ))}
-            </div>
-            <div className="sidebar__section">
-              <div className="sidebar__section-title">历史会话 ({closedSessions.length})</div>
-              {closedSessions.map((s) => (
-                <SessionItem
-                  key={s.id}
-                  session={s}
-                  active={s.id === currentId}
-                  onSelect={() => onSelect(s.id)}
-                  onDelete={() => onDelete(s.id)}
-                  onTitleSave={(title) => onTitleSave(s.id, title)}
-                />
-              ))}
-            </div>
-          </div>
-        </>
-      )}
-    </aside>
-  );
-}
-
-function SessionItem({
-  session,
-  active,
-  onSelect,
-  onDelete,
-  onTitleSave,
-}: {
-  session: AgentSession;
-  active: boolean;
-  onSelect: () => void;
-  onDelete: () => void;
-  onTitleSave: (title: string) => void;
-}) {
-  const [editing, setEditing] = useState(false);
-  const [title, setTitle] = useState(session.title);
-
-  return (
-    <div className={classNames("session-item", active && "session-item--active")} onClick={onSelect}>
-      <div className="session-item__row">
-        {editing ? (
-          <input
-            className="session-item__input"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            onBlur={() => {
-              setEditing(false);
-              onTitleSave(title);
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                setEditing(false);
-                onTitleSave(title);
-              }
-            }}
-            autoFocus
-            onClick={(e) => e.stopPropagation()}
-          />
-        ) : (
-          <div className="session-item__title" onDoubleClick={() => setEditing(true)} title="双击编辑标题">
-            {session.title}
-          </div>
-        )}
-        <button
-          className="session-item__close"
-          title="删除会话"
-          onClick={(e) => {
-            e.stopPropagation();
-            onDelete();
-          }}
-        >
-          ✕
-        </button>
-      </div>
-      <div className="session-item__meta">
-        <span className="session-item__id" title={session.id}>
-          {session.id.slice(0, 8)}
-        </span>
-        <span className={classNames("status-badge", statusClass[session.status])}>{statusText[session.status] ?? session.status}</span>
-        <span className="session-item__time">{formatTime(session.updatedAt)}</span>
       </div>
     </div>
   );
