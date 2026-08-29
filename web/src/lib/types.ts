@@ -126,6 +126,18 @@ export interface AgentSession {
   remediation?: Remediation;
   iteration: number;
   maxIterations: number;
+  hypotheses?: Hypothesis[];
+}
+
+export type HypothesisStatus = 'active' | 'confirmed' | 'ruled_out';
+
+export interface Hypothesis {
+  id: string;
+  statement: string;
+  status: HypothesisStatus;
+  evidenceIds: string[];
+  toolCallIds: string[];
+  updatedAt: string;
 }
 
 export type AlertSeverity = 'p0' | 'p1' | 'p2';

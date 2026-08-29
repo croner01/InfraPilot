@@ -8,7 +8,7 @@ import { StreamStatusLine } from './StreamStatusLine.js'
 import './conversation.css'
 
 const PROCESS_TYPES = new Set(['tool_call_start', 'tool_call_result', 'evidence_added', 'plan_update', 'status'])
-const SKIP_TYPES = new Set(['checkpoint_saved', 'runner_resumed'])
+const SKIP_TYPES = new Set(['checkpoint_saved', 'runner_resumed', 'hypothesis_update'])
 
 interface ConversationProps {
   events: TimelineEvent[]
