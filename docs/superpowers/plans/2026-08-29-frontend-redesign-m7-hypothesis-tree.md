@@ -97,6 +97,10 @@ Expected: PASS，`Tests  1 passed`。
 以下文件中的 `AgentSession` 字面量（含 `maxIterations: ...` 处）追加 `hypotheses: []`：
 - `server/src/agent/memoryStore.test.ts`（2 处）
 - `server/src/agent/checkpoint.test.ts`（2 处）
+- `server/src/agent/runner.test.ts`（`makeSession`）
+- `server/src/agent/runner.skills.test.ts`（`sessionForSkills`）
+- `server/src/agent/orchestrator.test.ts`（`makeSession`）
+- `server/src/agent/orchestrator.skills.test.ts`（`makeSession`）
 
 示例（memoryStore.test.ts）：
 
