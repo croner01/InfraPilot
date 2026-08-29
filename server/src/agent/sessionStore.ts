@@ -35,6 +35,7 @@ export function createSession(title: string): AgentSession {
     iteration: 0,
     maxIterations: 20,
     activeSkills: [],
+    hypotheses: [],
   };
   sessions.set(session.id, session);
   persist(session);
