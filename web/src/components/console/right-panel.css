@@ -1,0 +1,42 @@
+.ui-right-panel {
+  width: 356px;
+  flex: 0 0 356px;
+  background: var(--panel);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  transition: margin-right 0.18s ease;
+  min-height: 0;
+}
+.ui-right-panel--collapsed {
+  margin-right: -356px;
+}
+.ui-right-panel__head {
+  height: 46px;
+  flex: 0 0 46px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--border);
+}
+.ui-right-panel__collapse {
+  margin-left: auto;
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  color: var(--text-3);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 14px;
+}
+.ui-right-panel__collapse:hover {
+  background: var(--bg);
+  color: var(--text-2);
+}
+.ui-right-panel__body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px 16px;
+}
