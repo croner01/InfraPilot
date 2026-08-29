@@ -273,7 +273,7 @@ describe('ProcessSection', () => {
     const user = userEvent.setup()
     render(<ProcessSection items={items} />)
     await user.click(screen.getByRole('button', { name: /诊断过程/ }))
-    expect(screen.getByText('k8s.describe_pod()')).toBeInTheDocument()
+    expect(screen.getAllByText('k8s.describe_pod()')).toHaveLength(2)
     expect(screen.getByText('Pod 事件：OOMKilled')).toBeInTheDocument()
   })
 })
@@ -644,7 +644,6 @@ describe('Conversation', () => {
       <Conversation
         events={events}
         loading={false}
-        onApprove={() => {}}
         renderSpecial={(event) => <div data-testid={`special-${event.type}`}>{event.type}</div>}
         chatEndRef={ref}
       />,
@@ -665,7 +664,6 @@ describe('Conversation', () => {
       <Conversation
         events={[ev('e1', 'tool_call_start', { skill: 'k8s', tool: 'describe_pod' })]}
         loading
-        onApprove={() => {}}
         renderSpecial={() => null}
         chatEndRef={createRef<HTMLDivElement | null>()}
       />,
@@ -701,12 +699,11 @@ const SKIP_TYPES = new Set(['checkpoint_saved', 'runner_resumed'])
 interface ConversationProps {
   events: TimelineEvent[]
   loading: boolean
-  onApprove: (id: string, approved: boolean) => void
   renderSpecial: (event: TimelineEvent) => ReactNode
   chatEndRef: RefObject<HTMLDivElement | null>
 }
 
-export function Conversation({ events, loading, onApprove, renderSpecial, chatEndRef }: ConversationProps) {
+export function Conversation({ events, loading, renderSpecial, chatEndRef }: ConversationProps) {
   const { items, runningTool } = buildItems(events, renderSpecial)
   return (
     <div className="ui-conversation">
