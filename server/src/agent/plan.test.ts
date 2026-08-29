@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { extractPlan, extractRemediation } from "./plan.js";
+import { extractPlan, extractRemediation, extractHypotheses } from "./plan.js";
 
 describe("extractPlan", () => {
   it("returns empty when no plan marker", () => {
@@ -43,5 +43,28 @@ describe("extractRemediation", () => {
 
   it("returns null when block has no steps", () => {
     expect(extractRemediation("【修复方案】\n摘要: 无")).toBeNull();
+  });
+});
+
+describe("extractHypotheses", () => {
+  it("parses hypothesis list with statuses", () => {
+    const text = [
+      "【假设列表】",
+      "- [active] 内存 limit 不足导致 OOM",
+      "- [ruled_out] 节点资源不足",
+    ].join("\n");
+    expect(extractHypotheses(text)).toEqual([
+      { statement: "内存 limit 不足导致 OOM", status: "active" },
+      { statement: "节点资源不足", status: "ruled_out" },
+    ]);
+  });
+
+  it("returns empty when no marker", () => {
+    expect(extractHypotheses("无假设")).toEqual([]);
+  });
+
+  it("stops at the next marker", () => {
+    const text = "【假设列表】\n- [active] A\n【根因分析结论】\nxxx";
+    expect(extractHypotheses(text)).toEqual([{ statement: "A", status: "active" }]);
   });
 });

@@ -9,9 +9,10 @@ import { Remediation, RemediationStep } from "../types.js";
 const PLAN_MARKER = "【诊断计划】";
 const REMEDIATION_MARKER = "【修复方案】";
 const RCA_MARKER = "【根因分析结论】";
+const HYPOTHESIS_MARKER = "【假设列表】";
 
 function nextMarker(text: string, from: number): number {
-  const candidates = [PLAN_MARKER, REMEDIATION_MARKER, RCA_MARKER]
+  const candidates = [PLAN_MARKER, REMEDIATION_MARKER, RCA_MARKER, HYPOTHESIS_MARKER]
     .map((m) => text.indexOf(m, from))
     .filter((i) => i >= 0);
   if (candidates.length === 0) return text.length;
@@ -83,4 +84,28 @@ export function extractRemediation(text: string): Remediation | null {
   }
   if (steps.length === 0) return null;
   return { summary: summary || "Agent 生成的修复方案", steps };
+}
+
+export interface HypothesisInput {
+  statement: string;
+  status: "active" | "confirmed" | "ruled_out";
+}
+
+/** 提取【假设列表】块，每行格式 "- [active|confirmed|ruled_out] 假设描述" */
+export function extractHypotheses(text: string): HypothesisInput[] {
+  const idx = text.indexOf(HYPOTHESIS_MARKER);
+  if (idx < 0) return [];
+  const section = text.slice(idx + HYPOTHESIS_MARKER.length, nextMarker(text, idx + HYPOTHESIS_MARKER.length));
+  const result: HypothesisInput[] = [];
+  for (const raw of section.split("\n")) {
+    const line = raw.trim();
+    if (!line) continue;
+    const match = line.match(/^[-*•]\s*\[(active|confirmed|ruled_out)\]\s*(.+)$/);
+    if (!match) continue;
+    const statement = match[2].trim();
+    if (statement) {
+      result.push({ statement, status: match[1] as HypothesisInput["status"] });
+    }
+  }
+  return result;
 }
