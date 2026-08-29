@@ -139,6 +139,30 @@ describe("executeElkTool", () => {
     expect(res.data).toMatchObject({ index_pattern: "legacy-logs-*" });
   });
 
+  it("search_logs applies since time window filter", async () => {
+    SHIP_TARGETS.push(
+      { namespace: "order-service", podNamePrefix: "order-api", indexPrefix: "order-api-logs" }
+    );
+    mockSearchResult();
+
+    const res = await executeElkTool("search_logs", { namespace: "order-service", since: "30m" });
+    expect(res.success).toBe(true);
+    expect(osClient.search).toHaveBeenCalledWith(
+      expect.objectContaining({
+        body: expect.objectContaining({
+          query: {
+            bool: {
+              must: [
+                { term: { namespace: "order-service" } },
+                { range: { "@timestamp": { gte: "now-30m" } } },
+              ],
+            },
+          },
+        }),
+      })
+    );
+  });
+
   it("aggregate_by_field applies namespace filter and index pattern", async () => {
     SHIP_TARGETS.push(
       { namespace: "order-service", podNamePrefix: "order-api", indexPrefix: "order-api-logs" },
