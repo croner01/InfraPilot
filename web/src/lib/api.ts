@@ -2,7 +2,7 @@
 // API Client — 前端统一封装，带错误提示回调
 // ============================================================================
 
-import type { AgentSession, TimelineEvent } from "./types.js";
+import type { AgentSession, TimelineEvent, Alert } from "./types.js";
 
 // 默认走同源 /api，由 vite dev proxy 或 nginx 反代到后端；
 // 跨域部署时可显式设置 VITE_API_HOST 覆盖。
@@ -68,6 +68,10 @@ export function fetchSessionAudit(id: string, onError?: OnError) {
 
 export function fetchSessionEvents(id: string, onError?: OnError) {
   return request<TimelineEvent[]>(`/sessions/${id}/events`, undefined, onError);
+}
+
+export function fetchAlerts(onError?: OnError) {
+  return request<{ alerts: Alert[] }>('/alerts', undefined, onError);
 }
 
 export function fetchPodState(onError?: OnError) {

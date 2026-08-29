@@ -127,3 +127,17 @@ export interface AgentSession {
   iteration: number;
   maxIterations: number;
 }
+
+export type AlertSeverity = 'p0' | 'p1' | 'p2';
+export type AlertStatus = 'firing' | 'resolved' | 'acknowledged';
+
+export interface Alert {
+  id: string;
+  severity: AlertSeverity;
+  title: string;
+  source: string;
+  service: string;
+  status: AlertStatus;
+  startedAt: string;
+  sessionId?: string;
+}
