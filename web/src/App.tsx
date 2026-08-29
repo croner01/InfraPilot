@@ -8,6 +8,7 @@ import {
   listSessions,
   resetDemoScenario,
   sendMessage,
+  fetchAlerts,
   deleteSession,
   updateSessionTitle,
   decideApproval,
@@ -20,7 +21,7 @@ import { KnowledgePage } from "./components/KnowledgePage.js";
 import { TopologyPage } from "./components/TopologyPage.js";
 import { SettingsPage } from "./components/SettingsPage.js";
 import { SkillsPage } from "./components/SkillsPage.js";
-import type { AgentSession, TimelineEvent } from "./lib/types.js";
+import type { AgentSession, TimelineEvent, Alert } from "./lib/types.js";
 import "./styles/app.css";
 import { TopBar } from "./components/console/TopBar.js";
 import { SideNav } from "./components/console/SideNav.js";
@@ -58,6 +59,27 @@ export default function App() {
   const chatEndRef = useRef<HTMLDivElement | null>(null);
 
   const currentSession = sessions.find((s) => s.id === currentId);
+
+  const [alerts, setAlerts] = useState<Alert[]>([]);
+  const [alertsLoading, setAlertsLoading] = useState(true);
+  const [alertsError, setAlertsError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchAlerts((err) => {
+      if (!cancelled) {
+        setAlertsError(err.message);
+        setAlertsLoading(false);
+      }
+    }).then((rows) => {
+      if (cancelled || !rows) return;
+      setAlerts(rows.alerts);
+      setAlertsLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const notify = useCallback((message: string, type: "error" | "success" = "error") => {
     const id = Math.random().toString(36).slice(2);
@@ -185,8 +207,7 @@ export default function App() {
   const closedSessions = filteredSessions.filter((s) => s.status === "closed");
 
   const pendingApprovals = sessions.reduce((count, session) => count + session.pendingToolCalls.length, 0);
-  // M2 静态占位；M5 接入 /api/alerts 后替换
-  const activeAlerts = 3;
+  const activeAlerts = alerts.filter((alert) => alert.status === "firing").length;
 
   const handleInvestigateAlert = (_alertId: string) => {
     setCurrentView("sessions");
@@ -227,7 +248,21 @@ export default function App() {
           onTitleSave={handleTitleSave}
         />
         <Workspace>
-          {currentView === "alerts" && <AlertCenter onInvestigate={handleInvestigateAlert} />}
+          {currentView === "alerts" && (
+            <AlertCenter
+              alerts={alerts.map((alert) => ({
+                id: alert.id,
+                severity: alert.severity,
+                title: alert.title,
+                source: alert.source,
+                startedAt: alert.startedAt,
+                status: alert.status,
+              }))}
+              loading={alertsLoading}
+              error={alertsError}
+              onInvestigate={handleInvestigateAlert}
+            />
+          )}
           {currentView === "sessions" &&
             (currentSession ? (
               <>
