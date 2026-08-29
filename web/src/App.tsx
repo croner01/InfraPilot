@@ -25,7 +25,9 @@ import "./styles/app.css";
 import { TopBar } from "./components/console/TopBar.js";
 import { SideNav } from "./components/console/SideNav.js";
 import { Workspace } from "./components/console/Workspace.js";
-import { RightPanel } from "./components/console/RightPanel.js";
+import { RightPanel, type PanelTab } from "./components/console/RightPanel.js";
+import { ConclusionCard } from "./components/conclusion/ConclusionCard.js";
+import { EvidenceList } from "./components/panels/EvidenceList.js";
 import { AlertCenter } from "./components/alerts/AlertCenter.js";
 import { Conversation } from "./components/conversation/Conversation.js";
 import { EmptyWorkspace } from "./components/conversation/EmptyWorkspace.js";
@@ -191,6 +193,14 @@ export default function App() {
     if (!currentId) handleCreate();
   };
 
+  const [rightTab, setRightTab] = useState<PanelTab>("process");
+  const [highlightEvidenceId, setHighlightEvidenceId] = useState<string | null>(null);
+
+  const handleCitationClick = (evidenceId: string) => {
+    setHighlightEvidenceId(evidenceId);
+    setRightTab("evidence");
+  };
+
   return (
     <div className="app">
       <TopBar
@@ -255,6 +265,16 @@ export default function App() {
                     />
                   )}
                 </div>
+                {mainTab === "timeline" && currentSession.rootCause && (
+                  <ConclusionCard
+                    rootCause={currentSession.rootCause}
+                    remediation={currentSession.remediation}
+                    onCitationClick={handleCitationClick}
+                    onApproveRemediation={() =>
+                      notify("整单修复审批将在后续版本接入，当前请使用时间线中的逐操作审批")
+                    }
+                  />
+                )}
                 {mainTab === "timeline" && (
                   <div className="composer">
                     <input
@@ -281,8 +301,10 @@ export default function App() {
         </Workspace>
         {currentView === "sessions" && currentSession && (
           <RightPanel
-            process={<p className="ui-rp-placeholder">调查过程：M3 接入工具记录，M7 接入推理树</p>}
-            evidence={<p className="ui-rp-placeholder">证据链：{currentSession.evidence.length} 条证据（M3 渲染列表）</p>}
+            activeTab={rightTab}
+            onTabChange={setRightTab}
+            process={<p className="ui-rp-placeholder">调查过程：M7 接入推理树</p>}
+            evidence={<EvidenceList evidence={currentSession.evidence} highlightId={highlightEvidenceId} />}
             object={<ContextPanel />}
           />
         )}
