@@ -214,6 +214,20 @@ export interface KnowledgeCaseInput {
   sourceSessionId?: string; // 来源会话
 }
 
+export type AlertSeverity = "p0" | "p1" | "p2";
+export type AlertStatus = "firing" | "resolved" | "acknowledged";
+
+export interface Alert {
+  id: string;
+  severity: AlertSeverity;
+  title: string;
+  source: string;
+  service: string;
+  status: AlertStatus;
+  startedAt: string;
+  sessionId?: string;
+}
+
 export interface KnowledgeCase extends KnowledgeCaseInput {
   id: string;
   createdAt: string;
