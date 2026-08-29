@@ -1,0 +1,15 @@
+.msg-user {
+  display: flex;
+  justify-content: flex-end;
+}
+.msg-user__body {
+  max-width: 80%;
+  background: var(--accent-soft);
+  border-radius: 12px 12px 4px 12px;
+  padding: 11px 15px;
+  font-size: 14.5px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--text);
+}
