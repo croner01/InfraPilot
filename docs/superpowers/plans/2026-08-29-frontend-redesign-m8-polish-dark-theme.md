@@ -187,8 +187,8 @@ export function AppearanceSection() {
   }
 
   return (
-    <section id="appearance" className="appearance-section">
-      <h2 className="appearance-section__title">外观</h2>
+    <div className="appearance-section">
+      <h3 className="appearance-section__title">外观</h3>
       <p className="appearance-section__desc">切换界面主题，选择后立即生效并记住偏好。</p>
       <div className="appearance-section__options">
         <button
@@ -208,7 +208,7 @@ export function AppearanceSection() {
           深色
         </button>
       </div>
-    </section>
+    </div>
   )
 }
 ```
@@ -287,10 +287,12 @@ import { AppearanceSection } from "./settings/AppearanceSection.js";
   { id: "appearance", label: "外观" },
 ```
 
-- 在设置内容区找到各 section 的渲染位置（如 `activeSection === "memory-management" && (...)` 附近），追加：
+- 在设置内容区 `memory-management` section 结束后、`settings-footer` 之前追加：
 
 ```tsx
-          {activeSection === "appearance" && <AppearanceSection />}
+              <section id="appearance" className="settings-section card">
+                <AppearanceSection />
+              </section>
 ```
 
 - [ ] **Step 6: 构建验证**
