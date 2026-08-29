@@ -33,6 +33,11 @@ if (process.env.MCP_SERVER_MODE === "true") {
     await buildRegistry(ALL_TOOLS);
     await skillStore.init();
 
+    // 幂等播种 demo 告警（M5：真实 Alertmanager webhook 为二期）
+    const { seedAlerts } = await import("./demo/seedAlerts.js");
+    const seeded = seedAlerts();
+    if (seeded > 0) console.log(`[Alert Seed] ${seeded} alerts ready`);
+
     // 将 runtime-config.json 中的远程主机同步到 SSH_HOSTS，确保 sshProxy 能读取
     const { syncRuntimeHostsToEnv, syncMcpEnv } = await import("./config/store.js");
     syncRuntimeHostsToEnv();

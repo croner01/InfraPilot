@@ -1,0 +1,62 @@
+.hypothesis-tree {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.hypothesis-tree__empty {
+  color: var(--text-3);
+  font-size: 13px;
+  text-align: center;
+  padding: 24px 0;
+}
+.hypothesis-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  background: var(--panel);
+}
+.hypothesis-card--confirmed {
+  border-left: 3px solid var(--success);
+}
+.hypothesis-card--ruled {
+  border-left: 3px solid var(--border-strong);
+  opacity: 0.72;
+}
+.hypothesis-card--active {
+  border-left: 3px solid var(--warn);
+}
+.hypothesis-card__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.hypothesis-card__status {
+  font-size: 11.5px;
+  font-weight: 600;
+}
+.hypothesis-card__status--confirmed {
+  color: var(--success);
+}
+.hypothesis-card__status--ruled {
+  color: var(--text-3);
+}
+.hypothesis-card__status--active {
+  color: var(--warn);
+}
+.hypothesis-card__idx {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-3);
+}
+.hypothesis-card__text {
+  font-size: 13.5px;
+  line-height: 1.6;
+}
+.hypothesis-card__refs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}

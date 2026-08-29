@@ -1,0 +1,21 @@
+.ui-workspace {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg);
+}
+.ui-workspace > * {
+  animation: ui-fade-in-up 0.18s ease both;
+}
+@keyframes ui-fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

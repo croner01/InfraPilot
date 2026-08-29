@@ -1,0 +1,12 @@
+.ui-conversation {
+  flex: 1;
+  overflow-y: auto;
+  padding: 28px 32px 16px;
+}
+.ui-conversation__inner {
+  max-width: 760px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}

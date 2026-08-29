@@ -127,7 +127,8 @@ export type TimelineEventType =
   | "knowledge_case_added"
   | "checkpoint_saved"
   | "runner_resumed"
-  | "skills_activated";
+  | "skills_activated"
+  | "hypothesis_update";
 
 export interface TimelineEvent {
   id: string;
@@ -165,6 +166,18 @@ export interface AgentSession {
   iteration: number;
   maxIterations: number;
   activeSkills?: string[];
+  hypotheses: Hypothesis[];
+}
+
+export type HypothesisStatus = "active" | "confirmed" | "ruled_out";
+
+export interface Hypothesis {
+  id: string;
+  statement: string;
+  status: HypothesisStatus;
+  evidenceIds: string[];
+  toolCallIds: string[];
+  updatedAt: string;
 }
 
 // -------------------- Agent Checkpoint（LangGraph Checkpoint 语义） --------------------
@@ -212,6 +225,20 @@ export interface KnowledgeCaseInput {
   serviceName?: string; // 关联服务/组件
   tags?: string[]; // 人工标签
   sourceSessionId?: string; // 来源会话
+}
+
+export type AlertSeverity = "p0" | "p1" | "p2";
+export type AlertStatus = "firing" | "resolved" | "acknowledged";
+
+export interface Alert {
+  id: string;
+  severity: AlertSeverity;
+  title: string;
+  source: string;
+  service: string;
+  status: AlertStatus;
+  startedAt: string;
+  sessionId?: string;
 }
 
 export interface KnowledgeCase extends KnowledgeCaseInput {

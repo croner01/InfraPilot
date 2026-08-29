@@ -60,6 +60,7 @@ export const elkTools: ToolDef[] = [
         level: { type: "string", description: "INFO|WARN|ERROR, 留空表示不过滤" },
         keyword: { type: "string", description: "可选,消息内容关键字过滤" },
         limit: { type: "number", description: "最多返回条数,默认20" },
+        since: { type: "string", description: "可选,时间窗口,如 30m / 1h,留空表示不过滤" },
       },
       required: [],
       additionalProperties: false,
@@ -139,8 +140,8 @@ export async function executeElkTool(tool: string, args: Record<string, unknown>
   try {
     switch (tool) {
       case "search_logs": {
-        const { namespace, index_prefix, service, level, keyword, limit = 20 } = args as {
-          namespace?: string; index_prefix?: string; service?: string; level?: string; keyword?: string; limit?: number;
+        const { namespace, index_prefix, service, level, keyword, limit = 20, since } = args as {
+          namespace?: string; index_prefix?: string; service?: string; level?: string; keyword?: string; limit?: number; since?: string;
         };
         const searchOpts: SearchOptions = { namespace, index_prefix };
         const must: unknown[] = [];
@@ -148,6 +149,7 @@ export async function executeElkTool(tool: string, args: Record<string, unknown>
         if (service) must.push({ term: { service } });
         if (level) must.push({ term: { level } });
         if (keyword) must.push({ match: { message: String(keyword) } });
+        if (since) must.push({ range: { "@timestamp": { gte: `now-${String(since)}` } } });
         const query = must.length > 0 ? { bool: { must } } : { match_all: {} };
 
         const records = await searchRecords(query, Number(limit), searchOpts);

@@ -108,6 +108,17 @@ CREATE TABLE IF NOT EXISTS skills (
   installed_at TEXT NOT NULL,
   checksum TEXT
 );
+
+CREATE TABLE IF NOT EXISTS alerts (
+  id TEXT PRIMARY KEY,
+  severity TEXT NOT NULL,
+  title TEXT NOT NULL,
+  source TEXT NOT NULL,
+  service TEXT NOT NULL,
+  status TEXT NOT NULL,
+  started_at TEXT NOT NULL,
+  session_id TEXT
+);
 `);
 
 function addColumnIfMissing(table: string, column: string, definition: string) {
@@ -437,4 +448,41 @@ export function listAwaitingApprovalSessions(): { id: string; title: string; sta
     created_at: string;
     updated_at: string;
   }[];
+}
+
+export interface AlertRow {
+  id: string;
+  severity: string;
+  title: string;
+  source: string;
+  service: string;
+  status: string;
+  started_at: string;
+  session_id: string | null;
+}
+
+export function insertAlert(row: AlertRow) {
+  db.prepare(
+    `INSERT OR IGNORE INTO alerts (id, severity, title, source, service, status, started_at, session_id)
+     VALUES (@id, @severity, @title, @source, @service, @status, @started_at, @session_id)`
+  ).run(row);
+}
+
+export function listAlerts(options?: { status?: string; severity?: string }): AlertRow[] {
+  const clauses: string[] = [];
+  const params: Record<string, string> = {};
+  if (options?.status) {
+    clauses.push("status = @status");
+    params.status = options.status;
+  }
+  if (options?.severity) {
+    clauses.push("severity = @severity");
+    params.severity = options.severity;
+  }
+  const where = clauses.length > 0 ? ` WHERE ${clauses.join(" AND ")}` : "";
+  return db.prepare(`SELECT * FROM alerts${where} ORDER BY started_at DESC`).all(params) as AlertRow[];
+}
+
+export function getAlert(id: string): AlertRow | undefined {
+  return db.prepare(`SELECT * FROM alerts WHERE id = ?`).get(id) as AlertRow | undefined;
 }

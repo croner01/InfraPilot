@@ -126,4 +126,36 @@ export interface AgentSession {
   remediation?: Remediation;
   iteration: number;
   maxIterations: number;
+  hypotheses?: Hypothesis[];
+}
+
+export type HypothesisStatus = 'active' | 'confirmed' | 'ruled_out';
+
+export interface Hypothesis {
+  id: string;
+  statement: string;
+  status: HypothesisStatus;
+  evidenceIds: string[];
+  toolCallIds: string[];
+  updatedAt: string;
+}
+
+export type AlertSeverity = 'p0' | 'p1' | 'p2';
+export type AlertStatus = 'firing' | 'resolved' | 'acknowledged';
+
+export interface Alert {
+  id: string;
+  severity: AlertSeverity;
+  title: string;
+  source: string;
+  service: string;
+  status: AlertStatus;
+  startedAt: string;
+  sessionId?: string;
+}
+
+export interface LogEntry {
+  timestamp: string;
+  level: string;
+  message: string;
 }

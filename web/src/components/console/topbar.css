@@ -1,0 +1,73 @@
+.ui-topbar {
+  height: 56px;
+  flex: 0 0 56px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px 0 20px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+}
+.ui-topbar__brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.ui-topbar__logo {
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  background: var(--accent);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.ui-topbar__name {
+  font-size: 16px;
+  font-weight: 600;
+}
+.ui-topbar__sub {
+  font-size: 12px;
+  color: var(--text-3);
+}
+.ui-topbar__actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.ui-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 28px;
+  padding: 0 11px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--text-2);
+  font-size: 12.5px;
+}
+.ui-pill__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--success);
+}
+.ui-pill--muted .ui-pill__dot {
+  background: var(--text-3);
+}
+.ui-pill--warn {
+  color: var(--warn);
+  border-color: var(--pill-border-warn);
+}
+.ui-pill--warn .ui-pill__dot {
+  background: var(--warn);
+}
+.ui-pill--danger {
+  color: var(--danger);
+  border-color: var(--pill-border-danger);
+}
+.ui-pill--danger .ui-pill__dot {
+  background: var(--danger);
+}

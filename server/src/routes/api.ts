@@ -3,9 +3,10 @@ import { createSession, emitEvent, getSession, listSessionSummaries, deleteSessi
 import { startAgentTurn, resumeAgentTurn } from "../agent/orchestrator.js";
 import { getRealPodState, resetRealDemoScenario } from "../demo/realPodState.js";
 import { isAbnormalPod, listPods, readPod, listEventsForPod, type NormalizedPod } from "../skills/k8s/client.js";
-import { listAuditBySession, decideApproval, getApproval, listTimelineEvents } from "../db/db.js";
+import { listAuditBySession, decideApproval, getApproval, listTimelineEvents, listAlerts } from "../db/db.js";
 import { listKnowledgeCases, searchKnowledgeCases, getKnowledgeCase, addKnowledgeCase } from "../skills/knowledge/store.js";
 import { executeDrawioTool, type LogRelation } from "../skills/drawio/tools.js";
+import { executeElkTool } from "../skills/elk/tools.js";
 import {
   initMemoryStore,
   listMemories,
@@ -50,6 +51,57 @@ apiRouter.get("/sessions/:id/events", (req, res) => {
     payload: JSON.parse(r.payload),
   }));
   res.json(events);
+});
+
+apiRouter.get("/alerts", (req, res) => {
+  try {
+    const { status, severity } = req.query;
+    const rows = listAlerts({
+      status: status ? String(status) : undefined,
+      severity: severity ? String(severity) : undefined,
+    });
+    res.json({
+      alerts: rows.map((row) => ({
+        id: row.id,
+        severity: row.severity,
+        title: row.title,
+        source: row.source,
+        service: row.service,
+        status: row.status,
+        startedAt: row.started_at,
+        sessionId: row.session_id ?? undefined,
+      })),
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? String(err) });
+  }
+});
+
+apiRouter.get("/objects/:namespace/:name/logs", async (req, res) => {
+  try {
+    const { namespace, name } = req.params;
+    const { since, level, limit } = req.query;
+    const result = await executeElkTool("search_logs", {
+      namespace,
+      service: name,
+      level: level ? String(level) : undefined,
+      limit: limit ? Number(limit) : 50,
+      since: since ? String(since) : undefined,
+    });
+    if (!result.success) {
+      return res.status(500).json({ error: result.error ?? "日志查询失败" });
+    }
+    const raw = ((result.data as { logs?: Array<Record<string, unknown>> })?.logs ?? []) as Array<Record<string, unknown>>;
+    res.json({
+      logs: raw.map((log) => ({
+        timestamp: String(log["@timestamp"] ?? ""),
+        level: String(log.level ?? "INFO"),
+        message: String(log.message ?? ""),
+      })),
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? String(err) });
+  }
 });
 
 apiRouter.patch("/sessions/:id", (req, res) => {

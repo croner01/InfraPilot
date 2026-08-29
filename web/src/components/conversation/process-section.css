@@ -1,0 +1,86 @@
+.ui-process-group {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--panel);
+  overflow: hidden;
+}
+.ui-process-group__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 14px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  color: var(--text-2);
+  text-align: left;
+}
+.ui-process-group__head:hover {
+  background: var(--hover-bg);
+}
+.ui-process-group__title {
+  font-weight: 600;
+  color: var(--text);
+}
+.ui-process-group__meta {
+  color: var(--text-3);
+}
+.ui-process-group__chev {
+  margin-left: auto;
+  color: var(--text-3);
+  font-size: 12px;
+}
+.ui-process-group__body {
+  border-top: 1px solid var(--border);
+}
+.ui-process-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  font-size: 12.5px;
+  border-bottom: 1px solid var(--border);
+  font-family: var(--font-mono);
+}
+.ui-process-row:last-child {
+  border-bottom: none;
+}
+.ui-process-row__icon {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-3);
+}
+.ui-process-row__icon--ok {
+  color: var(--success);
+}
+.ui-process-row__icon--fail {
+  color: var(--danger);
+}
+.ui-process-row__icon--running {
+  color: var(--warn);
+  font-size: 8px;
+}
+.ui-process-row__title {
+  color: var(--text);
+  flex: 0 0 auto;
+}
+.ui-process-row__detail {
+  color: var(--text-2);
+  font-family: var(--font-sans);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ui-process-row__time {
+  margin-left: auto;
+  color: var(--text-3);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}

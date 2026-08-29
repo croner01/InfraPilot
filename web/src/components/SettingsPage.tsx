@@ -30,6 +30,7 @@ import {
   type MemoryEntry,
   type ShipTargetStatus,
 } from "../lib/api.js";
+import { AppearanceSection } from "./settings/AppearanceSection.js";
 
 const SECTIONS = [
   { id: "llm-providers", label: "模型配置" },
@@ -37,6 +38,7 @@ const SECTIONS = [
   { id: "remote-hosts", label: "远程主机" },
   { id: "mcp-agent", label: "MCP Agent" },
   { id: "memory-management", label: "记忆管理" },
+  { id: "appearance", label: "外观" },
 ] as const;
 
 export function SettingsPage({ notify }: { notify: (msg: string, type?: "error" | "success") => void }) {
@@ -255,6 +257,10 @@ export function SettingsPage({ notify }: { notify: (msg: string, type?: "error" 
                   onMemoriesChange={setMemories}
                   notify={notify}
                 />
+              </section>
+
+              <section id="appearance" className="settings-section card">
+                <AppearanceSection />
               </section>
 
               <div className="settings-footer">
