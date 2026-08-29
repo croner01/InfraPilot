@@ -25,6 +25,7 @@ import { RightPanel, type PanelTab } from "./components/console/RightPanel.js";
 import { ConclusionCard } from "./components/conclusion/ConclusionCard.js";
 import { EvidenceList } from "./components/panels/EvidenceList.js";
 import { ObjectContext } from "./components/panels/ObjectContext.js";
+import { HypothesisTree } from "./components/panels/HypothesisTree.js";
 import { AlertCenter } from "./components/alerts/AlertCenter.js";
 import { Conversation } from "./components/conversation/Conversation.js";
 import { EmptyWorkspace } from "./components/conversation/EmptyWorkspace.js";
@@ -334,7 +335,12 @@ export default function App() {
           <RightPanel
             activeTab={rightTab}
             onTabChange={setRightTab}
-            process={<p className="ui-rp-placeholder">调查过程：M7 接入推理树</p>}
+            process={
+              <HypothesisTree
+                hypotheses={currentSession.hypotheses ?? []}
+                onCitationClick={handleCitationClick}
+              />
+            }
             evidence={<EvidenceList evidence={currentSession.evidence} highlightId={highlightEvidenceId} />}
             object={
               <ObjectContext
@@ -596,4 +602,3 @@ function ApprovalCard({
     </div>
   );
 }
-
