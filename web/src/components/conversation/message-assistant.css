@@ -1,0 +1,22 @@
+.msg-assistant {
+  display: flex;
+  gap: 12px;
+}
+.msg-assistant__avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  flex: 0 0 30px;
+  background: var(--accent);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+}
+.msg-assistant__body {
+  flex: 1;
+  min-width: 0;
+  padding-top: 3px;
+}
