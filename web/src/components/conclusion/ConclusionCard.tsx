@@ -1,5 +1,6 @@
 import { Badge } from '../ui/Badge.js'
 import { Button } from '../ui/Button.js'
+import { Markdown } from '../ui/Markdown.js'
 import { EvidenceCitation } from './EvidenceCitation.js'
 import type { RootCause, Remediation, RiskLevel } from '../../lib/types.js'
 import './conclusion-card.css'
@@ -39,7 +40,9 @@ export function ConclusionCard({
         <h2 className="conclusion-card__title">根因分析结论</h2>
         <Badge label={`置信度 ${confidence}%`} tone="accent" />
       </div>
-      <p className="conclusion-card__summary">{rootCause.summary}</p>
+      <div className="conclusion-card__summary">
+        <Markdown>{rootCause.summary}</Markdown>
+      </div>
       {rootCause.evidenceChain.length > 0 && (
         <div className="conclusion-card__chain">
           {rootCause.evidenceChain.map((ref, index) => (

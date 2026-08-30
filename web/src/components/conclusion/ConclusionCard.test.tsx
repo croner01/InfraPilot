@@ -30,6 +30,17 @@ describe('ConclusionCard', () => {
     expect(screen.getByText('将内存 limit 从 256Mi 调整到 512Mi')).toBeInTheDocument()
   })
 
+  it('renders markdown formatting in the summary', () => {
+    const withMarkdown: RootCause = {
+      ...rootCause,
+      summary: '**根因摘要**：内存 limit 过小\n\n- 置信度 0.9',
+    }
+    render(<ConclusionCard rootCause={withMarkdown} onCitationClick={() => {}} />)
+    expect(screen.getByText('根因摘要')).toBeInTheDocument()
+    expect(screen.getAllByRole('list').length).toBeGreaterThan(0)
+    expect(screen.queryByText('**根因摘要**：内存 limit 过小')).not.toBeInTheDocument()
+  })
+
   it('fires citation click with evidence id', async () => {
     const onCitationClick = vi.fn()
     const user = userEvent.setup()

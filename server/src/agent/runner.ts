@@ -21,7 +21,7 @@ import { emitEvent, emitEventLive, getSession, updateSession } from "./sessionSt
 import { insertApproval, decideApproval as dbDecideApproval, getApproval } from "../db/db.js";
 import { saveCheckpoint, loadCheckpoint } from "./checkpoint.js";
 import { buildMemoryContext, extractAndStoreSessionMemory } from "./memoryStore.js";
-import { extractPlan, extractRemediation, extractHypotheses } from "./plan.js";
+import { extractPlan, extractRemediation, extractHypotheses, extractRca } from "./plan.js";
 import { mergeHypotheses } from "./hypotheses.js";
 import { collectStreamedCompletion } from "../llm/stream.js";
 import {
@@ -433,19 +433,19 @@ async function processAssistantContent(sessionId: string, session: AgentSession,
     emitEvent(sessionId, "remediation_plan", { summary: remediation.summary, steps: remediation.steps });
   }
 
-  const rcaMatch = content.match(/【根因分析结论】([\s\S]*)/);
-  if (rcaMatch) {
+  const rcaText = extractRca(content);
+  if (rcaText) {
     updateSession(sessionId, (s) => {
       s.status = "concluded";
       s.rootCause = {
-        summary: rcaMatch[1].trim(),
-        confidence: extractConfidence(rcaMatch[1]),
+        summary: rcaText,
+        confidence: extractConfidence(rcaText),
         evidenceChain: s.evidence.map((e) => ({ evidenceId: e.id, role: "supporting" as const })),
         alternativeHypotheses: [],
       };
     });
-    emitEvent(sessionId, "rca_conclusion", { content: rcaMatch[1].trim() });
-    await persistRootCauseAsCase(sessionId, session, rcaMatch[1].trim());
+    emitEvent(sessionId, "rca_conclusion", { content: rcaText });
+    await persistRootCauseAsCase(sessionId, session, rcaText);
   }
 }
 

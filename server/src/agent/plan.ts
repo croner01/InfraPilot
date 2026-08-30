@@ -109,3 +109,10 @@ export function extractHypotheses(text: string): HypothesisInput[] {
   }
   return result;
 }
+
+/** 提取【根因分析结论】块（截至下一个结构化标记），不含修复方案等后续内容 */
+export function extractRca(text: string): string {
+  const idx = text.indexOf(RCA_MARKER);
+  if (idx < 0) return "";
+  return text.slice(idx + RCA_MARKER.length, nextMarker(text, idx + RCA_MARKER.length)).trim();
+}

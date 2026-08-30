@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { extractPlan, extractRemediation, extractHypotheses } from "./plan.js";
+import { extractPlan, extractRemediation, extractHypotheses, extractRca } from "./plan.js";
 
 describe("extractPlan", () => {
   it("returns empty when no plan marker", () => {
@@ -66,5 +66,22 @@ describe("extractHypotheses", () => {
   it("stops at the next marker", () => {
     const text = "【假设列表】\n- [active] A\n【根因分析结论】\nxxx";
     expect(extractHypotheses(text)).toEqual([{ statement: "A", status: "active" }]);
+  });
+});
+
+describe("extractRca", () => {
+  it("extracts conclusion until the next structured marker", () => {
+    const text = [
+      "【根因分析结论】",
+      "**根因摘要**：内存 limit 过小",
+      "- 置信度 0.9",
+      "【修复方案】",
+      "1. 调整 limit",
+    ].join("\n");
+    expect(extractRca(text)).toBe("**根因摘要**：内存 limit 过小\n- 置信度 0.9");
+  });
+
+  it("returns empty when no marker", () => {
+    expect(extractRca("无结论")).toBe("");
   });
 });

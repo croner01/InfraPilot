@@ -19,6 +19,9 @@
   font-size: 14.5px;
   line-height: 1.7;
 }
+.conclusion-card__summary .markdown-body {
+  font-size: 14.5px;
+}
 .conclusion-card__chain {
   display: flex;
   flex-wrap: wrap;
