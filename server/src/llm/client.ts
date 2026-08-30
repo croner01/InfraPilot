@@ -21,7 +21,9 @@ function createClient(): OpenAI {
   const provider = getDefaultLlmProvider();
   if (provider) {
     const apiKey = provider.apiKey ?? process.env[provider.apiKeyEnv ?? ""] ?? loadEnvConfig().apiKey;
-    return new OpenAI({ apiKey, baseURL: provider.baseURL });
+    // 环境变量优先：允许部署场景（如 OPENAI_BASE_URL）覆盖默认 provider 的 baseURL
+    const baseURL = process.env.OPENAI_BASE_URL || provider.baseURL;
+    return new OpenAI({ apiKey, baseURL });
   }
   const { apiKey, baseURL } = loadEnvConfig();
   return new OpenAI({ apiKey, baseURL });
