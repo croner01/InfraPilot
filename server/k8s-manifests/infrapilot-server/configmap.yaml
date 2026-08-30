@@ -9,6 +9,8 @@ data:
   OPENAI_BASE_URL: "https://api.deepseek.com"
   REASONING_MODEL: "deepseek-v4-pro"
   FAST_MODEL: "deepseek-v4-flash"
+  # 宿主机 OpenSearch（单节点 k3s 场景）；多节点请改用集群内 Service
+  OPENSEARCH_NODE: "http://192.168.111.209:9200"
   # 如需使用 DeepSeek 的不同模型可在此覆盖
   # REASONING_MODEL: "deepseek-v4-pro"
   # FAST_MODEL: "deepseek-v4-flash"
