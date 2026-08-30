@@ -22,7 +22,7 @@ import { TopBar } from "./components/console/TopBar.js";
 import { SideNav } from "./components/console/SideNav.js";
 import { Workspace } from "./components/console/Workspace.js";
 import { RightPanel, type PanelTab } from "./components/console/RightPanel.js";
-import { ConclusionCard } from "./components/conclusion/ConclusionCard.js";
+import { ConclusionPanel } from "./components/conclusion/ConclusionPanel.js";
 import { EvidenceList } from "./components/panels/EvidenceList.js";
 import { ObjectContext } from "./components/panels/ObjectContext.js";
 import { HypothesisTree } from "./components/panels/HypothesisTree.js";
@@ -30,6 +30,7 @@ import { AlertCenter } from "./components/alerts/AlertCenter.js";
 import { Conversation } from "./components/conversation/Conversation.js";
 import { EmptyWorkspace } from "./components/conversation/EmptyWorkspace.js";
 import type { ViewKey } from "./lib/view.js";
+import { progressForStatus } from "./lib/progress.js";
 
 type MainTab = "timeline" | "evidence" | "plan" | "remediation" | "audit";
 
@@ -154,10 +155,10 @@ export default function App() {
 
   // Auto scroll chat
   useEffect(() => {
-    if (mainTab === "timeline") {
+    if (mainTab === "timeline" && running) {
       chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }
-  }, [events, mainTab]);
+  }, [events, running, mainTab]);
 
   const handleCreate = async () => {
     const s = await createSession("新的故障排查会话", (err) => notify(err.message));
@@ -166,11 +167,13 @@ export default function App() {
     setEvents([]);
     setCurrentId(s.id);
     setMainTab("timeline");
+    setConclusionDismissed(false);
   };
 
   const handleSelect = async (id: string) => {
     setCurrentId(id);
     setMainTab("timeline");
+    setConclusionDismissed(false);
     const [s, events] = await Promise.all([
       getSession(id),
       fetchSessionEvents(id, (err) => notify(err.message)),
@@ -225,6 +228,7 @@ export default function App() {
 
   const [rightTab, setRightTab] = useState<PanelTab>("process");
   const [highlightEvidenceId, setHighlightEvidenceId] = useState<string | null>(null);
+  const [conclusionDismissed, setConclusionDismissed] = useState(false);
 
   const handleCitationClick = (evidenceId: string) => {
     setHighlightEvidenceId(evidenceId);
@@ -311,14 +315,17 @@ export default function App() {
                     />
                   )}
                 </div>
-                {mainTab === "timeline" && currentSession.rootCause && (
-                  <ConclusionCard
+                {mainTab === "timeline" && (
+                  <ConclusionPanel
+                    running={running}
+                    statusMessage={statusMessage}
+                    progress={progressForStatus(currentSession?.status)}
                     rootCause={currentSession.rootCause}
                     remediation={currentSession.remediation}
                     onCitationClick={handleCitationClick}
-                    onApproveRemediation={() =>
-                      notify("整单修复审批将在后续版本接入，当前请使用时间线中的逐操作审批")
-                    }
+                    dismissed={conclusionDismissed}
+                    onDismiss={() => setConclusionDismissed(true)}
+                    onReopen={() => setConclusionDismissed(false)}
                   />
                 )}
                 {mainTab === "timeline" && (
@@ -488,34 +495,9 @@ function EventCard({ event, onApprove }: { event: TimelineEvent; onApprove: (id:
         </div>
       );
     case "remediation_plan":
-      return (
-        <div className="timeline-item timeline-item--remediation">
-          <div className="timeline-item__icon">🛠️</div>
-          <div className="timeline-item__body">
-            <div className="timeline-item__title">修复方案</div>
-            <div className="timeline-item__text">{p.summary}</div>
-            {p.steps && (
-              <ol className="timeline-item__list">
-                {p.steps.map((step: any, i: number) => (
-                  <li key={i}>{step.description}</li>
-                ))}
-              </ol>
-            )}
-          </div>
-          <div className="timeline-item__time">{formatTime(event.timestamp)}</div>
-        </div>
-      );
+      return null; // 结论面板中已展示修复方案，避免重复
     case "rca_conclusion":
-      return (
-        <div className="timeline-item timeline-item--rca">
-          <div className="timeline-item__icon">🎯</div>
-          <div className="timeline-item__body">
-            <div className="timeline-item__title">根因分析结论</div>
-            <div className="timeline-item__text timeline-item__text--highlight">{p.content}</div>
-          </div>
-          <div className="timeline-item__time">{formatTime(event.timestamp)}</div>
-        </div>
-      );
+      return null; // 由悬浮结论面板展示，避免重复与样式孤儿
     case "knowledge_case_added":
       return (
         <div className="timeline-item timeline-item--knowledge">
