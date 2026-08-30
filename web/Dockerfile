@@ -1,6 +1,6 @@
 # InfraPilot Web — 生产静态站点镜像
 # Stage 1：Vite 构建 React 应用
-FROM node:22 AS builder
+FROM node:22-alpine AS builder
 
 WORKDIR /app
 COPY package*.json ./

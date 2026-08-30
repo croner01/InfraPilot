@@ -6,6 +6,9 @@ metadata:
 data:
   NODE_ENV: "production"
   PORT: "8787"
+  OPENAI_BASE_URL: "https://api.deepseek.com"
+  REASONING_MODEL: "deepseek-v4-pro"
+  FAST_MODEL: "deepseek-v4-flash"
   # 如需使用 DeepSeek 的不同模型可在此覆盖
   # REASONING_MODEL: "deepseek-v4-pro"
   # FAST_MODEL: "deepseek-v4-flash"
