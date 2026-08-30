@@ -119,3 +119,16 @@ export function emitEvent(sessionId: string, type: TimelineEventType, payload: u
   bus.emit("event", event);
   return event;
 }
+
+/** 仅广播不落库：用于高频流式事件（如 assistant_delta），避免污染时间线持久化 */
+export function emitEventLive(sessionId: string, type: TimelineEventType, payload: unknown): TimelineEvent {
+  const event: TimelineEvent = {
+    id: uuidv4(),
+    sessionId,
+    type,
+    timestamp: new Date().toISOString(),
+    payload,
+  };
+  bus.emit("event", event);
+  return event;
+}

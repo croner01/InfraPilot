@@ -17,12 +17,13 @@ import { selectSkillsForTurn, toSkillDoc } from "../skills/packages/select.js";
 import { searchKnowledgeCases, addKnowledgeCase } from "../skills/knowledge/store.js";
 import { executeToolCall } from "../gateway/commandGateway.js";
 import { computeArgsHash } from "../gateway/argsHash.js";
-import { emitEvent, getSession, updateSession } from "./sessionStore.js";
+import { emitEvent, emitEventLive, getSession, updateSession } from "./sessionStore.js";
 import { insertApproval, decideApproval as dbDecideApproval, getApproval } from "../db/db.js";
 import { saveCheckpoint, loadCheckpoint } from "./checkpoint.js";
 import { buildMemoryContext, extractAndStoreSessionMemory } from "./memoryStore.js";
 import { extractPlan, extractRemediation, extractHypotheses } from "./plan.js";
 import { mergeHypotheses } from "./hypotheses.js";
+import { collectStreamedCompletion } from "../llm/stream.js";
 import {
   AgentCheckpoint,
   AgentSession,
@@ -284,17 +285,28 @@ export async function runAgentStep(
       tools,
       tool_choice: "auto",
       parallel_tool_calls: true,
+      stream: true,
     });
 
-    const choice = completion.choices[0];
-    const msg = choice.message;
+    // 流式收集：增量推送 assistant_delta（仅广播不落库），结束时整体落库
+    let deltaCount = 0;
+    const { content, toolCalls } = await collectStreamedCompletion(completion, (piece) => {
+      deltaCount++;
+      if (deltaCount % 4 === 0) {
+        emitEventLive(sessionId, "assistant_delta", { content: piece });
+      }
+    });
+    const msg: ChatMsg = {
+      role: "assistant",
+      content: content || null,
+      ...(toolCalls.length > 0 ? { tool_calls: toolCalls } : {}),
+    };
     checkpoint.history.push(msg as ChatMsg);
 
-    if (msg.content) {
-      await processAssistantContent(sessionId, session, msg.content);
+    if (content) {
+      await processAssistantContent(sessionId, session, content);
     }
 
-    const toolCalls = msg.tool_calls ?? [];
     if (toolCalls.length === 0) {
       updateSession(sessionId, (s) => {
         if (s.status !== "concluded") s.status = "closed";

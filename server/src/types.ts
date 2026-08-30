@@ -128,7 +128,8 @@ export type TimelineEventType =
   | "checkpoint_saved"
   | "runner_resumed"
   | "skills_activated"
-  | "hypothesis_update";
+  | "hypothesis_update"
+  | "assistant_delta";
 
 export interface TimelineEvent {
   id: string;
