@@ -48,11 +48,13 @@ export function ConclusionPanel({
         >
           ✕
         </button>
-        <ConclusionCard
-          rootCause={rootCause}
-          remediation={remediation}
-          onCitationClick={onCitationClick}
-        />
+        <div className="conclusion-panel__scroll">
+          <ConclusionCard
+            rootCause={rootCause}
+            remediation={remediation}
+            onCitationClick={onCitationClick}
+          />
+        </div>
       </div>
     )
   }
