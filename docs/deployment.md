@@ -227,6 +227,37 @@ kubectl port-forward -n infrapilot svc/infrapilot-web 8080:80
 
 生产环境建议通过 Ingress 暴露 `infrapilot-web` Service，并配置 TLS。
 
+### 7.1 NodePort 访问（单节点快速验证）
+
+当 port-forward 不可用（如 k3s 使用 docker 运行时缺少 socat）时，可创建 NodePort Service：
+
+```bash
+kubectl apply -f - <<'EOF'
+apiVersion: v1
+kind: Service
+metadata:
+  name: infrapilot-web-nodeport
+  namespace: infrapilot
+spec:
+  type: NodePort
+  selector:
+    app.kubernetes.io/name: infrapilot-web
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80
+      nodePort: 30080
+EOF
+```
+
+然后通过 `http://<节点IP>:30080` 访问前端（`/api` 与 `/ws` 由 nginx 代理到后端 Service）。
+
+### 7.2 LLM / OpenSearch 部署要点
+
+- `OPENAI_BASE_URL` 环境变量会覆盖默认 LLM Provider 的 baseURL（`server/src/llm/client.ts`），
+  部署到 k3s 时在 ConfigMap 中指向实际的 DeepSeek/OpenAI 兼容端点即可。
+- `OPENSEARCH_NODE` 可覆盖 ELK 数据源地址；单节点 k3s 场景可直接指向宿主机 OpenSearch 端口。
+
 ## 6. 与 OpenSearch / ClickHouse 的集成
 
 - **OpenSearch**：LogShipper 默认向 `http://opensearch:9200` 推送日志（可通过环境变量覆盖）。如需使用 ELK Skill，请确保集群内存在可访问的 OpenSearch 服务。
