@@ -13,23 +13,41 @@ const SKIP_TYPES = new Set(['checkpoint_saved', 'runner_resumed', 'hypothesis_up
 interface ConversationProps {
   events: TimelineEvent[]
   loading: boolean
+  running?: boolean
+  statusMessage?: string
   renderSpecial: (event: TimelineEvent) => ReactNode
   chatEndRef: RefObject<HTMLDivElement | null>
 }
 
-export function Conversation({ events, loading, renderSpecial, chatEndRef }: ConversationProps) {
-  const { items, runningTool } = buildItems(events, renderSpecial)
+export function Conversation({
+  events,
+  loading,
+  running = false,
+  statusMessage,
+  renderSpecial,
+  chatEndRef,
+}: ConversationProps) {
+  const { items, runningTool, liveDelta } = buildItems(events, renderSpecial)
+  const lastProcessIndex = items.reduce((last, item, index) => (item.kind === 'process' ? index : last), -1)
   return (
     <div className="ui-conversation">
       <div className="ui-conversation__inner">
-        {loading && <StreamStatusLine text={runningTool ? `正在执行 ${runningTool}…` : 'Agent 正在思考…'} />}
-        {items.map((item) =>
+        {(loading || running) && (
+          <StreamStatusLine text={runningTool ? `正在执行 ${runningTool}…` : (statusMessage ?? 'Agent 正在思考…')} />
+        )}
+        {items.map((item, index) =>
           item.kind === 'process' ? (
-            <ProcessSection key={item.key} items={item.items} />
+            <ProcessSection
+              key={item.key}
+              items={item.items}
+              autoOpen={running}
+              runningLabel={running && runningTool && index === lastProcessIndex ? runningTool : undefined}
+            />
           ) : (
             item.node
           ),
         )}
+        {liveDelta.trim() && <MessageAssistant key="live" content={liveDelta} live />}
         <div ref={chatEndRef} />
       </div>
     </div>
@@ -43,10 +61,11 @@ type RenderItem =
 function buildItems(
   events: TimelineEvent[],
   renderSpecial: (event: TimelineEvent) => ReactNode,
-): { items: RenderItem[]; runningTool: string | null } {
+): { items: RenderItem[]; runningTool: string | null; liveDelta: string } {
   const items: RenderItem[] = []
   let buffer: ProcessItem[] = []
   let runningTool: string | null = null
+  let liveDelta = ''
   let groupIndex = 0
 
   const flush = () => {
@@ -58,6 +77,10 @@ function buildItems(
 
   for (const event of events) {
     if (SKIP_TYPES.has(event.type)) continue
+    if (event.type === 'assistant_delta') {
+      liveDelta += String(event.payload?.content ?? '')
+      continue
+    }
     if (PROCESS_TYPES.has(event.type)) {
       const item = toProcessItem(event)
       buffer.push(item)
@@ -73,6 +96,7 @@ function buildItems(
         node: <MessageUser key={event.id} content={String(event.payload?.message ?? event.payload?.content ?? '')} />,
       })
     } else if (event.type === 'assistant_message') {
+      liveDelta = ''
       items.push({
         kind: 'node',
         node: <MessageAssistant key={event.id} content={String(event.payload?.content ?? '')} />,
@@ -82,7 +106,7 @@ function buildItems(
     }
   }
   flush()
-  return { items, runningTool }
+  return { items, runningTool, liveDelta }
 }
 
 function toProcessItem(event: TimelineEvent): ProcessItem {

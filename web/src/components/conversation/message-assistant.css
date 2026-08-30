@@ -20,3 +20,14 @@
   min-width: 0;
   padding-top: 3px;
 }
+.msg-assistant--live .msg-assistant__body::after {
+  content: '▍';
+  margin-left: 2px;
+  color: var(--accent);
+  animation: msg-cursor-blink 1s steps(2, start) infinite;
+}
+@keyframes msg-cursor-blink {
+  to {
+    visibility: hidden;
+  }
+}

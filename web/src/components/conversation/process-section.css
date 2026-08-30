@@ -28,6 +28,14 @@
 .ui-process-group__meta {
   color: var(--text-3);
 }
+.ui-process-group__running {
+  color: var(--warn);
+  font-weight: 600;
+}
+.ui-process-group__counts {
+  color: var(--text-3);
+  margin-left: 8px;
+}
 .ui-process-group__chev {
   margin-left: auto;
   color: var(--text-3);

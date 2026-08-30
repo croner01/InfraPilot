@@ -57,6 +57,18 @@ export default function App() {
 
   const currentSession = sessions.find((s) => s.id === currentId);
 
+  const RUNNING_STATUSES = new Set(['intake', 'planning', 'executing', 'awaiting_approval', 'reflecting', 'remediating']);
+  const STATUS_MESSAGE: Record<string, string> = {
+    intake: '正在接收问题…',
+    planning: '正在分析问题并制定诊断计划…',
+    executing: '正在执行诊断步骤…',
+    awaiting_approval: '等待审批…',
+    reflecting: '正在综合分析证据…',
+    remediating: '正在执行修复…',
+  };
+  const running = !!currentSession && RUNNING_STATUSES.has(currentSession.status);
+  const statusMessage = currentSession ? STATUS_MESSAGE[currentSession.status] : undefined;
+
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [alertsLoading, setAlertsLoading] = useState(true);
   const [alertsError, setAlertsError] = useState<string | null>(null);
@@ -286,6 +298,8 @@ export default function App() {
                     <Conversation
                       events={events}
                       loading={loading && events.length === 0}
+                      running={running}
+                      statusMessage={statusMessage}
                       renderSpecial={(event) => <EventCard event={event} onApprove={handleApprove} />}
                       chatEndRef={chatEndRef}
                     />

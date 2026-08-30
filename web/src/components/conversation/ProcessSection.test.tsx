@@ -24,4 +24,15 @@ describe('ProcessSection', () => {
     expect(screen.getAllByText('k8s.describe_pod()')).toHaveLength(2)
     expect(screen.getByText('Pod 事件：OOMKilled')).toBeInTheDocument()
   })
+
+  it('opens automatically when autoOpen is set', () => {
+    render(<ProcessSection items={items} autoOpen />)
+    expect(screen.getAllByText('k8s.describe_pod()')).toHaveLength(2)
+  })
+
+  it('shows running label with counts', () => {
+    render(<ProcessSection items={items} runningLabel="linux.get_memory_info()" />)
+    expect(screen.getByText(/正在执行 linux\.get_memory_info\(\)/)).toBeInTheDocument()
+    expect(screen.getByText(/已执行 1 个工具/)).toBeInTheDocument()
+  })
 })

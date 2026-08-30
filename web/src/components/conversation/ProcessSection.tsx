@@ -10,8 +10,14 @@ export type ProcessItem = {
   time?: string
 }
 
-export function ProcessSection({ items }: { items: ProcessItem[] }) {
-  const [open, setOpen] = useState(false)
+interface ProcessSectionProps {
+  items: ProcessItem[]
+  autoOpen?: boolean
+  runningLabel?: string
+}
+
+export function ProcessSection({ items, autoOpen = false, runningLabel }: ProcessSectionProps) {
+  const [open, setOpen] = useState(autoOpen)
   const toolCount = items.filter((item) => item.icon === 'result').length
   const evidenceCount = items.filter((item) => item.icon === 'evidence').length
 
@@ -25,7 +31,16 @@ export function ProcessSection({ items }: { items: ProcessItem[] }) {
       >
         <span className="ui-process-group__title">诊断过程</span>
         <span className="ui-process-group__meta">
-          已执行 {toolCount} 个工具 · 收集 {evidenceCount} 条证据
+          {runningLabel ? (
+            <>
+              <span className="ui-process-group__running">正在执行 {runningLabel}</span>
+              <span className="ui-process-group__counts">
+                已执行 {toolCount} 个工具 · 收集 {evidenceCount} 条证据
+              </span>
+            </>
+          ) : (
+            <>已执行 {toolCount} 个工具 · 收集 {evidenceCount} 条证据</>
+          )}
         </span>
         <span className="ui-process-group__chev">{open ? '▾' : '▸'}</span>
       </button>
