@@ -77,6 +77,14 @@ describe_pod 的返回结果中会包含 pid 字段(容器主进程在宿主机�
 linux.get_memory_info(host="local", pid=xxx) 来获取该进程在宿主机上的真实内存占用详情,
 从而交叉验证K8s报告的状态与宿主机真实资源使用情况是否一致。
 
+⚠️ 执行作用域警告: 当 InfraPilot Server 部署在 Kubernetes Pod 内运行时, linux 工具的
+host="local" 作用域是 **InfraPilot Server 容器自身**, 不是宿主机, 也不是目标业务 Pod。
+此时:
+- linux.get_memory_info 返回的是宿主机 /proc/meminfo 透传, 不能代表业务容器的 cgroup 内存限制;
+- linux.get_process_info / tail_recent_dmesg_or_syslog 只能看到 server 容器自身的进程与日志;
+- 诊断业务 Pod 的内存/进程/OOM 时, 必须优先使用 k8s.top_pods / k8s.get_pod_memory /
+  k8s.get_pod_processes / k8s.get_deployment, 不得用 linux 工具推断业务 Pod 或宿主机状态。
+
 # 背景知识: 常见故障模式参考
 - CrashLoopBackOff + lastState.reason=OOMKilled + exit_code=137: 通常是容器内存 limit 设置过低,
   在真实负载下触发 OOM。可通过 ELK 日志中的 rss_mb 增长趋势与 limit 对比确认是渐进泄漏还是瞬时突增。

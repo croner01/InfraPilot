@@ -13,6 +13,7 @@
 
 import * as k8s from "@kubernetes/client-node";
 import fs from "node:fs";
+import { PassThrough } from "node:stream";
 
 function loadKubeConfig(): k8s.KubeConfig {
   const kc = new k8s.KubeConfig();
@@ -52,6 +53,180 @@ function loadKubeConfig(): k8s.KubeConfig {
 export const kubeConfig = loadKubeConfig();
 export const coreApi = kubeConfig.makeApiClient(k8s.CoreV1Api);
 export const appsApi = kubeConfig.makeApiClient(k8s.AppsV1Api);
+export const customObjectsApi = kubeConfig.makeApiClient(k8s.CustomObjectsApi);
+
+// -------------------- 指标与部署信息 --------------------
+
+/** "38m" -> 0.038, "2" -> 2, "500m" -> 0.5 */
+export function parseCpu(input: string | undefined): number | undefined {
+  if (!input) return undefined;
+  const m = input.match(/^([\d.]+)(m)?$/);
+  if (!m) return undefined;
+  const value = Number(m[1]);
+  return m[2] === "m" ? value / 1000 : value;
+}
+
+/** "4095Mi" -> 4293918720, "4Gi" -> 4294967296, "512Mi", "1048576" */
+export function parseMemory(input: string | undefined): number | undefined {
+  if (!input) return undefined;
+  const m = input.match(/^([\d.]+)(Ki|Mi|Gi|Ti)?$/i);
+  if (!m) return undefined;
+  const value = Number(m[1]);
+  const unit = (m[2] ?? "").toLowerCase();
+  if (unit === "ki") return Math.round(value * 1024);
+  if (unit === "mi") return Math.round(value * 1024 * 1024);
+  if (unit === "gi") return Math.round(value * 1024 * 1024 * 1024);
+  if (unit === "ti") return Math.round(value * 1024 ** 4);
+  return value;
+}
+
+export interface PodMetricRow {
+  name: string;
+  namespace: string;
+  cpuCores: number;
+  memoryBytes: number;
+  cpuLimit?: number;
+  memoryLimit?: number;
+  memoryPercent?: number;
+}
+
+/** 读取 metrics.k8s.io Pod 用量（等价 kubectl top pod），并结合 Pod spec 的 limits 计算百分比 */
+export async function topPods(namespace?: string): Promise<PodMetricRow[]> {
+  const pods = await listPods(namespace);
+  const limitByKey = new Map<string, { limits?: Record<string, string> }>();
+  for (const p of pods) {
+    limitByKey.set(`${p.namespace}/${p.name}`, p.resources ?? {});
+  }
+
+  const res = namespace
+    ? await customObjectsApi.listNamespacedCustomObject({ group: "metrics.k8s.io", version: "v1beta1", namespace, plural: "pods" })
+    : await customObjectsApi.listClusterCustomObject({ group: "metrics.k8s.io", version: "v1beta1", plural: "pods" });
+  const items = ((res.body as { items?: unknown[] })?.items ?? []) as Array<{
+    metadata?: { namespace?: string; name?: string };
+    containers?: Array<{ usage?: Record<string, string> }>;
+  }>;
+
+  return items
+    .map((item) => {
+      const ns = item.metadata?.namespace ?? "";
+      const name = item.metadata?.name ?? "";
+      const usage = item.containers?.[0]?.usage ?? {};
+      const limits = limitByKey.get(`${ns}/${name}`)?.limits ?? {};
+      const cpuCores = parseCpu(usage.cpu) ?? 0;
+      const memoryBytes = parseMemory(usage.memory) ?? 0;
+      const cpuLimit = parseCpu(limits.cpu);
+      const memoryLimit = parseMemory(limits.memory);
+      return {
+        name,
+        namespace: ns,
+        cpuCores,
+        memoryBytes,
+        cpuLimit,
+        memoryLimit,
+        memoryPercent:
+          memoryLimit && memoryLimit > 0 ? Math.round((memoryBytes / memoryLimit) * 100) : undefined,
+      };
+    })
+    .filter((row) => row.name !== "");
+}
+
+/** 读取 Deployment 完整定义（脱敏：env 只保留名称与来源，不含密钥值） */
+export async function getDeployment(namespace: string, name: string) {
+  const deployment = await appsApi.readNamespacedDeployment({ name, namespace });
+  const spec = (deployment.spec ?? {}) as k8s.V1DeploymentSpec;
+  const template = spec.template?.spec;
+  const containers = (template?.containers ?? []) as k8s.V1Container[];
+  const volumes = (template?.volumes ?? []) as k8s.V1Volume[];
+  return {
+    name: deployment.metadata?.name,
+    namespace: deployment.metadata?.namespace,
+    replicas: spec.replicas,
+    strategy: spec.strategy?.type,
+    selector: spec.selector?.matchLabels ?? {},
+    containers: containers.map((c) => ({
+      name: c.name,
+      image: c.image,
+      imagePullPolicy: c.imagePullPolicy,
+      resources: c.resources,
+      ports: (c.ports ?? []).map((p) => ({ name: p.name, containerPort: p.containerPort, protocol: p.protocol })),
+      env: (c.env ?? []).map((e) => ({
+        name: e.name,
+        from: e.valueFrom
+          ? (e.valueFrom.secretKeyRef?.name ?? e.valueFrom.configMapKeyRef?.name ?? "other")
+          : "literal",
+      })),
+      volumeMounts: (c.volumeMounts ?? []).map((v) => ({ name: v.name, mountPath: v.mountPath })),
+    })),
+    volumes: volumes.map((v) => ({
+      name: v.name,
+      type: v.emptyDir
+        ? "emptyDir"
+        : v.persistentVolumeClaim
+          ? "persistentVolumeClaim"
+          : v.configMap
+            ? "configMap"
+            : v.secret
+              ? "secret"
+              : v.hostPath
+                ? "hostPath"
+                : "other",
+      pvcName: v.persistentVolumeClaim?.claimName,
+    })),
+  };
+}
+
+/** 通过 kube-apiserver 的 exec 通道在目标 Pod 内执行只读命令（返回合并后的 stdout/stderr 文本） */
+export function execPodCommand(
+  namespace: string,
+  podName: string,
+  command: string,
+  container?: string,
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const exec = new k8s.Exec(kubeConfig);
+    let out = "";
+    let settled = false;
+    const finish = (err?: Error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      if (err) reject(err);
+      else resolve(out);
+    };
+    const timeout = setTimeout(() => finish(new Error("exec timeout")), 20000);
+
+    try {
+      const stdout = new PassThrough();
+      const stderr = new PassThrough();
+      stdout.on("data", (chunk: Buffer) => {
+        out += chunk.toString("utf8");
+      });
+      stderr.on("data", (chunk: Buffer) => {
+        out += chunk.toString("utf8");
+      });
+      const socketPromise = exec.exec(
+        namespace,
+        podName,
+        container ?? "",
+        ["sh", "-c", command],
+        stdout,
+        stderr,
+        null,
+        false,
+        (status) => {
+          if (status?.status === "Failure") finish(new Error(status.message ?? "exec failed"));
+          else finish();
+        },
+      );
+      socketPromise.then(
+        (socket) => socket.on("error", (err: Error) => finish(err)),
+        (err: unknown) => finish(err instanceof Error ? err : new Error(String(err))),
+      );
+    } catch (err) {
+      finish(err instanceof Error ? err : new Error(String(err)));
+    }
+  });
+}
 
 export interface NormalizedPod {
   name: string;
