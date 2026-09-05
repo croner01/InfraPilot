@@ -22,7 +22,7 @@ import { insertApproval, decideApproval as dbDecideApproval, getApproval } from 
 import { saveCheckpoint, loadCheckpoint } from "./checkpoint.js";
 import { buildMemoryContext, extractAndStoreSessionMemory } from "./memoryStore.js";
 import { extractPlan, extractRemediation, extractHypotheses, extractRca, extractCounterEvidence } from "./plan.js";
-import { mergeHypotheses } from "./hypotheses.js";
+import { mergeHypotheses, linkHypothesesToEvidence } from "./hypotheses.js";
 import { collectStreamedCompletion } from "../llm/stream.js";
 import {
   AgentCheckpoint,
@@ -419,7 +419,7 @@ async function processAssistantContent(sessionId: string, session: AgentSession,
   const hypotheses = extractHypotheses(content);
   if (hypotheses.length > 0) {
     updateSession(sessionId, (s) => {
-      s.hypotheses = mergeHypotheses(s.hypotheses ?? [], hypotheses);
+      s.hypotheses = linkHypothesesToEvidence(mergeHypotheses(s.hypotheses ?? [], hypotheses), s.evidence);
     });
     const updated = getSession(sessionId);
     emitEvent(sessionId, "hypothesis_update", { hypotheses: updated?.hypotheses ?? [] });
