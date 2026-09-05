@@ -55,12 +55,23 @@ export async function startAgentTurn(sessionId: string, userMessage: string): Pr
     checkpoint = await createInitialCheckpoint(sessionId, userMessage);
   }
 
-  const { done } = await runAgentStep(sessionId, checkpoint);
+  try {
+    const { done } = await runAgentStep(sessionId, checkpoint);
 
-  // 若 runner 因遇到审批而退出，orchestrator 不再阻塞；
-  // 审批到达后由 /approve 接口触发 resumeAgentTurn。
-  if (!done) {
-    // 已在 runner 内保存 checkpoint 并发出 approval_request 事件
+    // 若 runner 因遇到审批而退出，orchestrator 不再阻塞；
+    // 审批到达后由 /approve 接口触发 resumeAgentTurn。
+    if (!done) {
+      // 已在 runner 内保存 checkpoint 并发出 approval_request 事件
+    }
+  } catch (err) {
+    // 致命错误（如 LLM 网络中断）：收尾会话避免永久卡在执行中
+    const message = err instanceof Error ? err.message : String(err);
+    updateSession(sessionId, (s) => {
+      s.status = "closed";
+    });
+    emitEvent(sessionId, "error", { message });
+    emitEvent(sessionId, "done", {});
+    throw err;
   }
 }
 
