@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { extractPlan, extractRemediation, extractHypotheses, extractRca } from "./plan.js";
+import { extractPlan, extractRemediation, extractHypotheses, extractRca, extractCounterEvidence } from "./plan.js";
 
 describe("extractPlan", () => {
   it("returns empty when no plan marker", () => {
@@ -83,5 +83,22 @@ describe("extractRca", () => {
 
   it("returns empty when no marker", () => {
     expect(extractRca("无结论")).toBe("");
+  });
+});
+
+describe("extractCounterEvidence", () => {
+  it("extracts counter-evidence list until next marker", () => {
+    const text = [
+      "【反证检查】",
+      "- 存在 1 个 Running 副本, 但其内存已贴 4Gi 上限",
+      "- 最有力反证: 无 OOMKilled 标记",
+      "【根因分析结论】",
+      "根因是...",
+    ].join("\n");
+    expect(extractCounterEvidence(text)).toHaveLength(2);
+  });
+
+  it("returns empty when no marker", () => {
+    expect(extractCounterEvidence("直接结论")).toEqual([]);
   });
 });

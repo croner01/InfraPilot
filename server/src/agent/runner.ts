@@ -21,7 +21,7 @@ import { emitEvent, emitEventLive, getSession, updateSession } from "./sessionSt
 import { insertApproval, decideApproval as dbDecideApproval, getApproval } from "../db/db.js";
 import { saveCheckpoint, loadCheckpoint } from "./checkpoint.js";
 import { buildMemoryContext, extractAndStoreSessionMemory } from "./memoryStore.js";
-import { extractPlan, extractRemediation, extractHypotheses, extractRca } from "./plan.js";
+import { extractPlan, extractRemediation, extractHypotheses, extractRca, extractCounterEvidence } from "./plan.js";
 import { mergeHypotheses } from "./hypotheses.js";
 import { collectStreamedCompletion } from "../llm/stream.js";
 import {
@@ -441,7 +441,7 @@ async function processAssistantContent(sessionId: string, session: AgentSession,
         summary: rcaText,
         confidence: extractConfidence(rcaText),
         evidenceChain: s.evidence.map((e) => ({ evidenceId: e.id, role: "supporting" as const })),
-        alternativeHypotheses: [],
+        alternativeHypotheses: extractCounterEvidence(content),
       };
     });
     emitEvent(sessionId, "rca_conclusion", { content: rcaText });

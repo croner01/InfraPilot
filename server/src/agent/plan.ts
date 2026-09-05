@@ -10,9 +10,10 @@ const PLAN_MARKER = "【诊断计划】";
 const REMEDIATION_MARKER = "【修复方案】";
 const RCA_MARKER = "【根因分析结论】";
 const HYPOTHESIS_MARKER = "【假设列表】";
+const COUNTER_MARKER = "【反证检查】";
 
 function nextMarker(text: string, from: number): number {
-  const candidates = [PLAN_MARKER, REMEDIATION_MARKER, RCA_MARKER, HYPOTHESIS_MARKER]
+  const candidates = [PLAN_MARKER, REMEDIATION_MARKER, RCA_MARKER, HYPOTHESIS_MARKER, COUNTER_MARKER]
     .map((m) => text.indexOf(m, from))
     .filter((i) => i >= 0);
   if (candidates.length === 0) return text.length;
@@ -115,4 +116,15 @@ export function extractRca(text: string): string {
   const idx = text.indexOf(RCA_MARKER);
   if (idx < 0) return "";
   return text.slice(idx + RCA_MARKER.length, nextMarker(text, idx + RCA_MARKER.length)).trim();
+}
+
+/** 提取【反证检查】块，供结论前自检/替代假设展示 */
+export function extractCounterEvidence(text: string): string[] {
+  const idx = text.indexOf(COUNTER_MARKER);
+  if (idx < 0) return [];
+  const section = text.slice(idx + COUNTER_MARKER.length, nextMarker(text, idx + COUNTER_MARKER.length));
+  return section
+    .split("\n")
+    .map((line) => line.trim().replace(/^[-*•]\s*/, ""))
+    .filter((line) => line.length > 0 && !line.startsWith("```"));
 }
