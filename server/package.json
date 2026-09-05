@@ -11,6 +11,7 @@
     "start": "node dist/index.js",
     "seed": "tsx scripts/seedKnowledge.ts",
     "test": "vitest run",
+    "eval:agent": "tsx src/agent/eval/runEval.ts",
     "test:watch": "vitest",
     "mcp-server": "MCP_SERVER_MODE=true tsx src/index.ts",
     "mcp-server:prod": "MCP_SERVER_MODE=true node dist/index.js"

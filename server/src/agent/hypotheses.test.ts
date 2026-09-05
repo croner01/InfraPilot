@@ -25,8 +25,8 @@ describe("linkHypothesesToEvidence", () => {
       { id: "h1", statement: "内存 limit 过小（证据#1 与 证据#2 支撑）", status: "confirmed", evidenceIds: [], toolCallIds: [], updatedAt: "t" },
     ];
     const evidence: Evidence[] = [
-      { id: "ev-oom", type: "k8s_event", content: {}, confidence: 0.9, collectedAt: "t", summary: "OOM" },
-      { id: "ev-mem", type: "metric", content: {}, confidence: 0.8, collectedAt: "t", summary: "4095Mi" },
+      { id: "ev-oom", sourceAgent: "k8s-skill", sourceSkill: "k8s", type: "k8s_event", content: {}, confidence: 0.9, collectedAt: "t", summary: "OOM" },
+      { id: "ev-mem", sourceAgent: "k8s-skill", sourceSkill: "k8s", type: "metric", content: {}, confidence: 0.8, collectedAt: "t", summary: "4095Mi" },
     ];
     expect(linkHypothesesToEvidence(hypotheses, evidence)[0].evidenceIds).toEqual(["ev-oom", "ev-mem"]);
   });
