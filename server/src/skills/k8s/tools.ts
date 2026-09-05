@@ -21,6 +21,7 @@ import {
   topPods,
 } from "./client.js";
 import type { NormalizedPod } from "./client.js";
+import { capSamples, countBy } from "../summary.js";
 
 export const k8sTools: ToolDef[] = [
   {
@@ -183,19 +184,17 @@ export async function executeK8sTool(tool: string, args: Record<string, unknown>
           .slice(0, 10)
           .map(decorate);
         const abnormal = pods.filter(isAbnormalPod);
-        const byReason: Record<string, number> = {};
-        for (const p of abnormal) {
-          const key = p.status ?? p.reason ?? "Unknown";
-          byReason[key] = (byReason[key] ?? 0) + 1;
-        }
-        const samples = [...abnormal]
+        const byReason = countBy(abnormal.map((p) => p.status ?? p.reason ?? "Unknown"));
+        const capped = capSamples(
+          [...abnormal]
           .sort((a, b) => {
             const at = a.startedAt ? new Date(a.startedAt).getTime() : 0;
             const bt = b.startedAt ? new Date(b.startedAt).getTime() : 0;
             return bt - at;
           })
-          .slice(0, 15)
-          .map(decorate);
+          .map(decorate),
+          15,
+        );
         return {
           success: true,
           data: {
@@ -206,8 +205,8 @@ export async function executeK8sTool(tool: string, args: Record<string, unknown>
               byReason,
             },
             running,
-            pods: samples,
-            truncated: abnormal.length > samples.length,
+            pods: capped.samples,
+            truncated: capped.truncated,
           },
           durationMs: Date.now() - start,
         };
