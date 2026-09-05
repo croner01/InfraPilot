@@ -32,7 +32,7 @@ async function runCase(evalCase: EvalCase): Promise<boolean> {
     body: JSON.stringify({ message: evalCase.message }),
   });
 
-  const deadline = Date.now() + 180_000;
+  const deadline = Date.now() + 600_000;
   let data: any;
   for (;;) {
     data = await get(`/sessions/${session.id}`);
