@@ -241,6 +241,8 @@ export interface NormalizedPod {
   resources?: { limits?: Record<string, string>; requests?: Record<string, string> };
   containerName?: string;
   uid?: string;
+  reason?: string;
+  evictionMessage?: string;
   ownerDeployment?: string; // 从 ReplicaSet 名反推出 Deployment 名, 供 patch 工具使用
 }
 
@@ -263,7 +265,8 @@ export function normalizePod(pod: k8s.V1Pod): NormalizedPod {
   const containerStatus = status.containerStatuses?.[0];
   const container = pod.spec?.containers?.[0];
 
-  let derivedStatus = status.phase ?? "Unknown";
+  const phase = status.phase ?? "Unknown";
+  let derivedStatus = phase;
   if (containerStatus) {
     const waiting = containerStatus.state?.waiting;
     const terminated = containerStatus.state?.terminated;
@@ -274,9 +277,13 @@ export function normalizePod(pod: k8s.V1Pod): NormalizedPod {
     } else if (containerStatus.ready) {
       derivedStatus = "Running";
     }
+  } else if (status.reason) {
+    // 无容器状态但 Pod 有终态 reason（典型: Evicted）
+    derivedStatus = status.reason;
   }
 
   const lastTerm = containerStatus?.lastState?.terminated;
+  const disruption = status.conditions?.find((c) => c.type === "DisruptionTarget");
 
   return {
     name: meta.name!,
@@ -303,6 +310,8 @@ export function normalizePod(pod: k8s.V1Pod): NormalizedPod {
       : undefined,
     containerName: container?.name,
     uid: meta.uid,
+    reason: status.reason,
+    evictionMessage: disruption?.message,
     ownerDeployment: inferOwnerDeployment(pod),
   };
 }

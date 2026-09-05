@@ -20,6 +20,7 @@ import {
   readPod,
   topPods,
 } from "./client.js";
+import type { NormalizedPod } from "./client.js";
 
 export const k8sTools: ToolDef[] = [
   {
@@ -27,12 +28,12 @@ export const k8sTools: ToolDef[] = [
     skill: "k8s",
     risk: "readonly",
     description:
-      "列出集群中当前状态异常(非Running/存在重启记录)的Pod, 用于在用户未提供具体Pod名时自主发现问题目标(等价于 kubectl get pods --all-namespaces | grep -v Running)",
+      "列出 Pod 并返回汇总式结果: summary 计数在最前(total/running/abnormal + 按状态聚合 byReason, 可区分 Evicted/Error/OOMKilled/CrashLoopBackOff), running 显式列出健康副本, pods 为最多15条按时间倒序的异常样本。用于确认服务是否可用、定位异常目标。",
     parameters: {
       type: "object",
       properties: {
         namespace: { type: "string", description: "可选,留空表示查询所有命名空间" },
-        all: { type: "boolean", description: "可选,true 时返回全部Pod(含健康), 并附带 startedAt/运行时长, 用于确认服务是否真的不可用" },
+        all: { type: "boolean", description: "兼容参数(历史调用保留); 无论取值, 本工具始终返回汇总 + running 列表 + 异常样本" },
       },
       required: [],
       additionalProperties: false,
@@ -162,40 +163,51 @@ export async function executeK8sTool(tool: string, args: Record<string, unknown>
     switch (tool) {
       case "list_pods": {
         const namespace = args.namespace as string | undefined;
-        const all = args.all === true;
         const pods = await listPods(namespace);
-        if (all) {
-          const now = Date.now();
-          return {
-            success: true,
-            data: {
-              pods: pods.map((p) => ({
-                name: p.name,
-                namespace: p.namespace,
-                status: p.status,
-                restarts: p.restartCount,
-                ready: p.ready,
-                nodeName: p.nodeName,
-                startedAt: p.startedAt,
-                ageSeconds: p.startedAt ? Math.max(0, Math.round((now - new Date(p.startedAt).getTime()) / 1000)) : undefined,
-                podIp: p.podIp,
-                ownerDeployment: p.ownerDeployment,
-              })),
-            },
-            durationMs: Date.now() - start,
-          };
-        }
+        const now = Date.now();
+        const decorate = (p: NormalizedPod) => ({
+          name: p.name,
+          namespace: p.namespace,
+          status: p.status,
+          reason: p.reason,
+          restarts: p.restartCount,
+          ready: p.ready,
+          startedAt: p.startedAt,
+          ageSeconds: p.startedAt ? Math.max(0, Math.round((now - new Date(p.startedAt).getTime()) / 1000)) : undefined,
+          nodeName: p.nodeName,
+          podIp: p.podIp,
+          ownerDeployment: p.ownerDeployment,
+        });
+        const running = pods
+          .filter((p) => p.status === "Running" && p.ready)
+          .slice(0, 10)
+          .map(decorate);
         const abnormal = pods.filter(isAbnormalPod);
+        const byReason: Record<string, number> = {};
+        for (const p of abnormal) {
+          const key = p.status ?? p.reason ?? "Unknown";
+          byReason[key] = (byReason[key] ?? 0) + 1;
+        }
+        const samples = [...abnormal]
+          .sort((a, b) => {
+            const at = a.startedAt ? new Date(a.startedAt).getTime() : 0;
+            const bt = b.startedAt ? new Date(b.startedAt).getTime() : 0;
+            return bt - at;
+          })
+          .slice(0, 15)
+          .map(decorate);
         return {
           success: true,
           data: {
-            pods: abnormal.map((p) => ({
-              name: p.name,
-              namespace: p.namespace,
-              status: p.status,
-              restarts: p.restartCount,
-            })),
-            note: abnormal.length === 0 ? "当前未发现明显异常Pod(所有Pod状态均为Running且无重启记录)" : undefined,
+            summary: {
+              total: pods.length,
+              running: running.length,
+              abnormal: abnormal.length,
+              byReason,
+            },
+            running,
+            pods: samples,
+            truncated: abnormal.length > samples.length,
           },
           durationMs: Date.now() - start,
         };

@@ -24,22 +24,39 @@ describe("executeK8sTool", () => {
     vi.mocked(isAbnormalPod).mockImplementation((p: { status: string; restartCount: number }) => p.status !== "Running" || p.restartCount > 0);
   });
 
-  it("list_pods returns only abnormal pods by default", async () => {
-    vi.mocked(listPods).mockResolvedValue([healthy, errored, restarting] as never);
+  it("list_pods returns summary with running list and abnormal samples", async () => {
+    const evicted = { name: "kafka-e", namespace: "islap", status: "Evicted", reason: "Evicted", restartCount: 0, ready: false, startedAt: "2026-08-20T01:00:00Z" };
+    vi.mocked(listPods).mockResolvedValue([healthy, errored, restarting, evicted] as never);
     const res = await executeK8sTool("list_pods", {});
     expect(res.success).toBe(true);
-    const names = (res.data as { pods: Array<{ name: string }> }).pods.map((p) => p.name);
-    expect(names).toEqual(["kafka-y", "kafka-z"]);
+    const data = res.data as {
+      summary: { total: number; running: number; abnormal: number; byReason: Record<string, number> };
+      running: Array<{ name: string }>;
+      pods: Array<{ name: string }>;
+    };
+    expect(data.summary).toMatchObject({ total: 4, running: 1, abnormal: 3 });
+    expect(data.summary.byReason).toMatchObject({ Error: 1, Evicted: 1, Running: 1 });
+    expect(data.running.map((p) => p.name)).toEqual(["kafka-x"]);
+    expect(data.pods).toHaveLength(3);
   });
 
-  it("list_pods with all=true includes healthy pods and age", async () => {
-    vi.mocked(listPods).mockResolvedValue([healthy, errored] as never);
+  it("list_pods caps abnormal samples and marks truncation", async () => {
+    const many = Array.from({ length: 20 }, (_, i) => ({
+      name: `pod-${i}`,
+      namespace: "islap",
+      status: "Evicted",
+      reason: "Evicted",
+      restartCount: 0,
+      ready: false,
+      startedAt: `2026-08-${String((i % 28) + 1).padStart(2, "0")}T01:00:00Z`,
+    }));
+    vi.mocked(listPods).mockResolvedValue([healthy, ...many] as never);
     const res = await executeK8sTool("list_pods", { all: true });
-    expect(res.success).toBe(true);
-    const pods = (res.data as { pods: Array<{ name: string; ageSeconds?: number }> }).pods;
-    expect(pods).toHaveLength(2);
-    expect(pods[0].name).toBe("kafka-x");
-    expect(pods[0].ageSeconds).toBeGreaterThan(0);
+    const data = res.data as { summary: { abnormal: number; byReason: Record<string, number> }; pods: unknown[]; truncated: boolean };
+    expect(data.summary.abnormal).toBe(20);
+    expect(data.summary.byReason).toMatchObject({ Evicted: 20 });
+    expect(data.pods).toHaveLength(15);
+    expect(data.truncated).toBe(true);
   });
 
   it("top_pods returns usage rows", async () => {
