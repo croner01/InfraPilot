@@ -163,6 +163,19 @@ describe("executeElkTool", () => {
     );
   });
 
+  it("search_logs notes empty results instead of silent zero", async () => {
+    SHIP_TARGETS.push(
+      { namespace: "order-service", podNamePrefix: "order-api", indexPrefix: "order-api-logs" }
+    );
+    const mocked = osClient.search as ReturnType<typeof vi.fn>;
+    mocked.mockRejectedValue({ meta: { body: { error: { type: "index_not_found_exception" } } } });
+
+    const res = await executeElkTool("search_logs", { namespace: "order-service", since: "30m" });
+    expect(res.success).toBe(true);
+    expect((res.data as { note?: string }).note).toContain("索引不存在或为空");
+    expect((res.data as { logs: unknown[] }).logs).toEqual([]);
+  });
+
   it("aggregate_by_field applies namespace filter and index pattern", async () => {
     SHIP_TARGETS.push(
       { namespace: "order-service", podNamePrefix: "order-api", indexPrefix: "order-api-logs" },

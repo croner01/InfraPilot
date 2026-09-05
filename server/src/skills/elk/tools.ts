@@ -114,10 +114,14 @@ export const elkTools: ToolDef[] = [
   },
 ];
 
-async function searchRecords(query: unknown, size: number, options?: SearchOptions): Promise<LogRecord[]> {
+async function searchRecords(
+  query: unknown,
+  size: number,
+  options?: SearchOptions,
+): Promise<{ records: LogRecord[]; indexMissing: boolean }> {
   const index = buildIndexPattern(options);
   // 显式 namespace/index 未映射到任何采集索引时直接返回空,避免对空索引发起无效查询
-  if (!index) return [];
+  if (!index) return { records: [], indexMissing: true };
   try {
     const res: any = await osClient.search({
       index,
@@ -127,9 +131,11 @@ async function searchRecords(query: unknown, size: number, options?: SearchOptio
         size,
       },
     } as any);
-    return res.body.hits.hits.map((h: any) => h._source as LogRecord);
+    return { records: res.body.hits.hits.map((h: any) => h._source as LogRecord), indexMissing: false };
   } catch (err: any) {
-    if (err?.meta?.body?.error?.type === "index_not_found_exception") return [];
+    if (err?.meta?.body?.error?.type === "index_not_found_exception") {
+      return { records: [], indexMissing: true };
+    }
     throw err;
   }
 }
@@ -152,9 +158,17 @@ export async function executeElkTool(tool: string, args: Record<string, unknown>
         if (since) must.push({ range: { "@timestamp": { gte: `now-${String(since)}` } } });
         const query = must.length > 0 ? { bool: { must } } : { match_all: {} };
 
-        const records = await searchRecords(query, Number(limit), searchOpts);
+        const { records, indexMissing } = await searchRecords(query, Number(limit), searchOpts);
         const result = records.slice(-Number(limit)).map((l) => ({ ...l, message: redact(l.message ?? "") }));
-        return { success: true, data: { total_matched: result.length, logs: result, index_pattern: buildIndexPattern(searchOpts) }, durationMs: Date.now() - start };
+        const data: Record<string, unknown> = {
+          total_matched: result.length,
+          logs: result,
+          index_pattern: buildIndexPattern(searchOpts),
+        };
+        if (indexMissing) {
+          data.note = `索引不存在或为空(${buildIndexPattern(searchOpts)}), 可能是日志采集未覆盖或时间窗内无数据`;
+        }
+        return { success: true, data, durationMs: Date.now() - start };
       }
 
       case "aggregate_by_field": {
@@ -168,14 +182,26 @@ export async function executeElkTool(tool: string, args: Record<string, unknown>
             durationMs: Date.now() - start,
           };
         }
-        const res: any = await osClient.search({
-          index,
-          body: {
-            size: 0,
-            query: namespace ? { bool: { must: [{ term: { namespace } }] } } : { match_all: {} },
-            aggs: { by_field: { terms: { field: `${field}.keyword`, size: 20 } } },
-          },
-        } as any);
+        let res: any;
+        try {
+          res = await osClient.search({
+            index,
+            body: {
+              size: 0,
+              query: namespace ? { bool: { must: [{ term: { namespace } }] } } : { match_all: {} },
+              aggs: { by_field: { terms: { field: `${field}.keyword`, size: 20 } } },
+            },
+          } as any);
+        } catch (err: any) {
+          if (err?.meta?.body?.error?.type === "index_not_found_exception") {
+            return {
+              success: true,
+              data: { field, counts: {}, total: 0, index_pattern: index, note: `索引不存在或为空(${index})` },
+              durationMs: Date.now() - start,
+            };
+          }
+          throw err;
+        }
         const buckets = (res.body.aggregations?.by_field?.buckets ?? []) as Array<{ key: string; doc_count: number }>;
         const counts: Record<string, number> = {};
         let total = 0;
@@ -198,14 +224,18 @@ export async function executeElkTool(tool: string, args: Record<string, unknown>
         }
         const must: unknown[] = [{ terms: { "level.keyword": ["WARN", "ERROR"] } }];
         addNamespaceFilter(must, namespace);
-        const records = await searchRecords({ bool: { must } }, 200, searchOpts);
+        const { records, indexMissing } = await searchRecords({ bool: { must } }, 200, searchOpts);
         const timeline = records.map((l) => ({
           time: l["@timestamp"],
           level: l.level,
           message: redact(l.message ?? ""),
           rss_mb: l.rss_mb,
         }));
-        return { success: true, data: { timeline, index_pattern: buildIndexPattern(searchOpts) }, durationMs: Date.now() - start };
+        const data: Record<string, unknown> = { timeline, index_pattern: buildIndexPattern(searchOpts) };
+        if (indexMissing) {
+          data.note = `索引不存在或为空(${buildIndexPattern(searchOpts)})`;
+        }
+        return { success: true, data, durationMs: Date.now() - start };
       }
 
       case "cluster_similar_errors": {
@@ -220,7 +250,7 @@ export async function executeElkTool(tool: string, args: Record<string, unknown>
         }
         const must: unknown[] = [{ terms: { "level.keyword": ["WARN", "ERROR"] } }];
         addNamespaceFilter(must, namespace);
-        const problematic = await searchRecords({ bool: { must } }, 500, searchOpts);
+        const { records: problematic, indexMissing } = await searchRecords({ bool: { must } }, 500, searchOpts);
         const clusters = new Map<string, { pattern: string; count: number; first: string; last: string; sample: LogRecord }>();
         for (const l of problematic) {
           const tmpl = templateOf(l.message ?? "");
@@ -242,7 +272,15 @@ export async function executeElkTool(tool: string, args: Record<string, unknown>
             last_seen: c.last,
             sample_log: redact(JSON.stringify(c.sample)),
           }));
-        return { success: true, data: { clusters: result, total_problematic_logs: problematic.length, index_pattern: buildIndexPattern(searchOpts) }, durationMs: Date.now() - start };
+        const data: Record<string, unknown> = {
+          clusters: result,
+          total_problematic_logs: problematic.length,
+          index_pattern: buildIndexPattern(searchOpts),
+        };
+        if (indexMissing) {
+          data.note = `索引不存在或为空(${buildIndexPattern(searchOpts)})`;
+        }
+        return { success: true, data, durationMs: Date.now() - start };
       }
 
       default:
