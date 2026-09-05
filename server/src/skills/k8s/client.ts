@@ -90,6 +90,45 @@ export interface PodMetricRow {
   memoryPercent?: number;
 }
 
+export interface NodeMetricRow {
+  name: string;
+  cpuCores: number;
+  memoryBytes: number;
+}
+
+/** 节点实时用量（metrics.k8s.io/v1beta1 nodes），等价 kubectl top node */
+export async function topNodes(): Promise<NodeMetricRow[]> {
+  const res = await customObjectsApi.listClusterCustomObject({ group: "metrics.k8s.io", version: "v1beta1", plural: "nodes" });
+  const items = ((res.body as { items?: unknown[] })?.items ?? []) as Array<{
+    metadata?: { name?: string };
+    usage?: Record<string, string>;
+  }>;
+  return items
+    .map((item) => ({
+      name: item.metadata?.name ?? "",
+      cpuCores: parseCpu(item.usage?.cpu) ?? 0,
+      memoryBytes: parseMemory(item.usage?.memory) ?? 0,
+    }))
+    .filter((row) => row.name !== "");
+}
+
+/** 节点 allocatable/capacity/conditions/taints（脱敏，无 secrets） */
+export async function getNode(name: string) {
+  const node = await coreApi.readNode({ name });
+  return {
+    name: node.metadata?.name,
+    capacity: node.status?.capacity,
+    allocatable: node.status?.allocatable,
+    conditions: (node.status?.conditions ?? []).map((c) => ({
+      type: c.type,
+      status: c.status,
+      reason: c.reason,
+      message: c.message,
+    })),
+    taints: (node.spec?.taints ?? []).map((t) => ({ key: t.key, effect: t.effect })),
+  };
+}
+
 /** 读取 metrics.k8s.io Pod 用量（等价 kubectl top pod），并结合 Pod spec 的 limits 计算百分比 */
 export async function topPods(namespace?: string): Promise<PodMetricRow[]> {
   const pods = await listPods(namespace);

@@ -19,6 +19,8 @@ import {
   patchDeploymentMemoryLimit,
   readPod,
   topPods,
+  topNodes,
+  getNode,
 } from "./client.js";
 import type { NormalizedPod } from "./client.js";
 import { capSamples, countBy } from "../summary.js";
@@ -97,6 +99,32 @@ export const k8sTools: ToolDef[] = [
         container: { type: "string", description: "可选,单容器Pod可省略" },
       },
       required: ["namespace", "pod_name"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "top_nodes",
+    skill: "k8s",
+    risk: "readonly",
+    description:
+      "读取所有节点 CPU/内存用量（等价 kubectl top node），用于判断节点级资源压力与 Pod 被驱逐(Evicted)的来源",
+    parameters: {
+      type: "object",
+      properties: {},
+      required: [],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "get_node",
+    skill: "k8s",
+    risk: "readonly",
+    description:
+      "读取节点详情：capacity/allocatable(内存/CPU)、conditions(含 MemoryPressure/DiskPressure)、taints；用于判断驱逐阈值与调度约束",
+    parameters: {
+      type: "object",
+      properties: { node_name: { type: "string" } },
+      required: ["node_name"],
       additionalProperties: false,
     },
   },
@@ -218,6 +246,25 @@ export async function executeK8sTool(tool: string, args: Record<string, unknown>
         return {
           success: true,
           data: { pods: rows },
+          durationMs: Date.now() - start,
+        };
+      }
+
+      case "top_nodes": {
+        const rows = await topNodes();
+        return {
+          success: true,
+          data: { nodes: rows },
+          durationMs: Date.now() - start,
+        };
+      }
+
+      case "get_node": {
+        const { node_name } = args as { node_name: string };
+        const node = await getNode(node_name);
+        return {
+          success: true,
+          data: { node },
           durationMs: Date.now() - start,
         };
       }

@@ -9,10 +9,12 @@ vi.mock("./client.js", () => ({
   patchDeploymentMemoryLimit: vi.fn(),
   readPod: vi.fn(),
   topPods: vi.fn(),
+  topNodes: vi.fn(),
+  getNode: vi.fn(),
 }));
 
 import { executeK8sTool } from "./tools.js";
-import { execPodCommand, getDeployment, isAbnormalPod, listPods, topPods } from "./client.js";
+import { execPodCommand, getDeployment, getNode, isAbnormalPod, listPods, topNodes, topPods } from "./client.js";
 
 const healthy = { name: "kafka-x", namespace: "islap", status: "Running", restartCount: 0, ready: true, startedAt: "2026-08-29T11:50:33Z" };
 const errored = { name: "kafka-y", namespace: "islap", status: "Error", restartCount: 0, ready: false, startedAt: "2026-08-24T19:28:00Z" };
@@ -101,5 +103,25 @@ describe("executeK8sTool", () => {
     const res = await executeK8sTool("get_pod_processes", { namespace: "islap", pod_name: "kafka-x" });
     expect(res.success).toBe(true);
     expect((res.data as { processes: string[] }).processes).toHaveLength(2);
+  });
+
+  it("top_nodes returns node usage rows", async () => {
+    vi.mocked(topNodes).mockResolvedValue([{ name: "ren-logging", cpuCores: 2.1, memoryBytes: 42949672960 }] as never);
+    const res = await executeK8sTool("top_nodes", {});
+    expect(res.success).toBe(true);
+    expect((res.data as { nodes: unknown[] }).nodes).toHaveLength(1);
+  });
+
+  it("get_node returns node details", async () => {
+    vi.mocked(getNode).mockResolvedValue({
+      name: "ren-logging",
+      allocatable: { memory: "64Gi" },
+      conditions: [{ type: "MemoryPressure", status: "False" }],
+      taints: [],
+    } as never);
+    const res = await executeK8sTool("get_node", { node_name: "ren-logging" });
+    expect(res.success).toBe(true);
+    expect((res.data as { node: { name: string } }).node.name).toBe("ren-logging");
+    expect(getNode).toHaveBeenCalledWith("ren-logging");
   });
 });
