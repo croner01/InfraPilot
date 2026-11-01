@@ -1,4 +1,5 @@
-# 仅影响「以仓库根目录为构建上下文」的镜像（如 py-server/Dockerfile）。
+# 仓库根目录不再是任何镜像的构建上下文（py-server/Dockerfile 已改为 py-server 上下文，
+# web 镜像在 web/ 内构建并有独立 .dockerignore）。保留本文件仅供历史/本地试验使用。
 .git
 .gitignore
 **/node_modules
@@ -8,7 +9,6 @@
 **/*.pyc
 # 运行时数据（不可进镜像）
 py-server/data
-server/data
 web/dist
 # 文档与原型
 docs

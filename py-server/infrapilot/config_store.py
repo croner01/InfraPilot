@@ -406,25 +406,17 @@ def find_host(registry: dict[str, Any], name: str) -> Optional[dict[str, Any]]:
     return next((h for h in registry.get("hosts") or [] if h.get("name") == name), None)
 
 
-# -------------------- Log Shipper 状态（保持 ship-status 契约） --------------------
-
+# -------------------- Log Shipper 状态 --------------------
 
 def get_ship_status() -> list[dict[str, Any]]:
-    """返回已配置采集目标的采集状态。
+    """真实采集状态由 log_shipper 记录（Node 版 logShipper.ts 的移植）。"""
+    from . import log_shipper
 
-    Python 版尚未实现后台采集循环（Phase 5 待办），此处给出与 Node 版「尚未扫描」
-    等价的占位状态，保证 `/config/log-systems/:id/ship-status` 契约不变。
-    """
-    legacy = get_legacy_elk_config()
-    targets = legacy.get("targets") or []
-    return [
-        {"target": t, "fileCount": 0, "lastShippedCount": 0, "totalShipped": 0, "warning": "尚未扫描,等待下一次采集"}
-        for t in targets
-    ]
+    return log_shipper.get_ship_status()
 
 
 def reload_ship_targets() -> None:
-    # 采集循环未实现前保持空操作；ELK 查询直接读取 logSystems 热更新。
+    # 采集目标每轮循环都从 config_store 重新读取，热更新即生效；此处保留为无操作。
     return None
 
 

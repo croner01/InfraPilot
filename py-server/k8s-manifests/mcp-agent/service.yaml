@@ -1,0 +1,17 @@
+# Headless Service，为未来「基于 DNS 自动发现 MCP Agent Pod」预留。
+# 当前主 server 通过 Host Registry（auth.type=mcp + endpoint）逐节点访问，
+# endpoint 形如 <节点IP>:8443（等价于 MCP_ENDPOINTS 环境变量的 JSON 映射）。
+apiVersion: v1
+kind: Service
+metadata:
+  name: linux-mcp-server
+  namespace: infrapilot-mcp
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  selector:
+    app: linux-mcp-server
+  ports:
+    - name: http
+      port: 8443
+      targetPort: 8443

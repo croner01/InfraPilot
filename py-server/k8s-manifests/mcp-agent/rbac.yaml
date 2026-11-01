@@ -1,0 +1,22 @@
+# linux-mcp-server RBAC：允许 Agent 在节点上执行只读 K8s 诊断（kubernetes client 直连 API）。
+# 包括节点、Pod、Deployment 等常见资源以及 Pod 日志。
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: linux-mcp-server-reader
+rules:
+  - apiGroups: [""]
+    resources: ["nodes", "pods", "services", "events", "configmaps", "secrets"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "daemonsets", "replicasets", "statefulsets"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["batch"]
+    resources: ["jobs", "cronjobs"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["metrics.k8s.io"]
+    resources: ["pods", "nodes"]
+    verbs: ["get", "list"]

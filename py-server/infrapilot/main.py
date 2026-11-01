@@ -24,7 +24,7 @@ from .routes.mcp import mcp_router
 from .routes.eval import eval_router
 from .routes.artifacts import artifacts_router
 from .routes.a2a import a2a_router, well_known_router
-from . import auth, scheduler
+from . import auth, scheduler, log_shipper
 
 
 @asynccontextmanager
@@ -33,10 +33,14 @@ async def lifespan(app: FastAPI):
     auth.ensure_seed_users()
     if scheduler.enabled():
         scheduler.scheduler.start()
+    if log_shipper.enabled():
+        # 真实 Pod 日志 -> OpenSearch 采集管道（移植自 Node 版 logShipper）
+        await log_shipper.start()
     try:
         yield
     finally:
         await scheduler.scheduler.stop()
+        await log_shipper.stop()
 
 
 app = FastAPI(title="InfraPilot Server (Python)", lifespan=lifespan)

@@ -1,15 +1,21 @@
-"""Linux Skill —— 对应 `server/src/skills/linux/{tools,agentTools}.ts`。
+"""Linux Skill —— 对应已删除的 `server/src/skills/linux/{tools,agentTools}.ts`。
 
-`host="local"` 在 InfraPilot 服务端所在主机本地执行；`host=<Host Registry 别名>`
-经 SSH 通道在远端节点执行**只读**诊断命令（见 infrapilot/remote.py 与
-docs/ssh-proxy-linux-remote.md）。任何非 local 的调用都由 policy 强制人工审批。
+`host="local"` 在 InfraPilot 服务端所在主机本地执行；`host=<Host Registry 别名>` 的远端执行
+按主机注册的传输通道分流（与 Node 版 mcp/client.ts 的路由语义一致）：
+- `auth.type=="mcp"`：经标准 MCP（JSON-RPC over HTTP）调用该节点上的 MCP Agent
+  （`MCP_SERVER_MODE=http python3 -m infrapilot.mcp_server`），见 infrapilot/mcp_client.py；
+- `auth.type` 为 ssh/password/privateKey/agent：经 SSH 通道执行**只读**诊断命令
+  （见 infrapilot/remote.py 与 docs/ssh-proxy-linux-remote.md）；
+- 变更类工具（restart_service/kill_process）在 SSH 通道被白名单拒绝；MCP 通道由
+  远端 MCP Server 的默认只读策略把关。
+任何非 local 的调用都由 policy 强制人工审批。
 """
 
 from __future__ import annotations
 
 import asyncio
 import time
-from typing import Any
+from typing import Any, Optional
 
 from ..models import ToolDef, ToolExecutionResult
 from ..redact import redact
@@ -299,6 +305,32 @@ async def execute_on_host(
     )
 
 
+async def _maybe_execute_via_mcp(tool: str, args: dict[str, Any]) -> Optional[ToolExecutionResult]:
+    """host 解析为 MCP 类型主机时，经标准 MCP 调用远端同名 linux 工具。
+
+    返回 None 表示该主机不走 MCP（由 SSH 通道按原逻辑处理）。
+    远端执行时把 host 归一为 local —— 该 Agent 就部署在目标节点上。
+    """
+    from .. import mcp_client
+
+    host = str(args.get("host") or "local")
+    if not host or host == "local":
+        return None
+    cfg = remote_skill.get_host(host)
+    if cfg is None or ((cfg.get("auth") or {}).get("type") != "mcp"):
+        return None
+    endpoint = mcp_client.discover_endpoint(host)
+    if not endpoint:
+        return ToolExecutionResult(
+            success=False,
+            error=f"主机 {host} 注册为 MCP 类型但未配置 endpoint",
+            durationMs=0,
+        )
+    forwarded = dict(args)
+    forwarded["host"] = "local"
+    return await mcp_client.call_tool(endpoint, f"linux__{tool}", forwarded)
+
+
 def _ms(start: float) -> int:
     return int((time.time() - start) * 1000)
 
@@ -473,6 +505,9 @@ async def execute(tool: str, args: dict[str, Any]) -> ToolExecutionResult:
     try:
         if tool == "inspect_files":
             return await _inspect_files(args, start)
+        routed = await _maybe_execute_via_mcp(tool, args)
+        if routed is not None:
+            return routed
         return await _execute_local(tool, args)
     except Exception as err:  # noqa: BLE001
         return ToolExecutionResult(success=False, error=str(err), durationMs=_ms(start))
@@ -548,6 +583,54 @@ def _render_fingerprint(data: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+async def _fingerprint_via_mcp(alias: str, paths: list[str], want_hash: bool) -> dict[str, Any]:
+    """MCP 型主机的指纹采集：经远端 linux.run_command 执行 stat/sha256sum（对端默认白名单允许 stat）。"""
+    from .. import mcp_client
+
+    endpoint = mcp_client.discover_endpoint(alias)
+    if not endpoint:
+        return {"host": alias, "files": [], "errors": [f"主机 {alias} 注册为 MCP 类型但未配置 endpoint"]}
+
+    forwarded = {"host": "local", "timeout_ms": 20000}
+    stat_res = await mcp_client.call_tool(
+        endpoint, "linux__run_command", {**forwarded, "command": "stat", "args": ["-c", remote_skill.STAT_FORMAT, *paths]}
+    )
+    if not stat_res.success:
+        return {"host": alias, "files": [], "errors": [stat_res.error or "stat 执行失败"]}
+
+    try:
+        files = remote_skill.parse_stat_lines(stat_res.stdout or "")
+    except Exception:  # noqa: BLE001
+        files = {}
+    errors: list[str] = [
+        line.strip()
+        for line in (stat_res.stderr or "").splitlines()
+        if line.strip() and "No such file" not in line
+    ]
+    missing = [p for p in paths if p not in files]
+
+    if want_hash and files:
+        # sha256sum 不在对端默认白名单：对端可通过 MCP_COMMAND_ALLOWLIST=sha256sum 放开
+        sha_res = await mcp_client.call_tool(
+            endpoint, "linux__run_command", {**forwarded, "command": "sha256sum", "args": list(files.keys())}
+        )
+        if sha_res.success:
+            hashes = remote_skill.parse_sha_lines(sha_res.stdout or "")
+            for name, digest in hashes.items():
+                if name in files:
+                    files[name]["sha256"] = digest
+        else:
+            errors.append(sha_res.error or "sha256sum 执行失败(对端需 MCP_COMMAND_ALLOWLIST 含 sha256sum)")
+
+    return {
+        "host": alias,
+        "files": [{"path": p, **files[p]} for p in paths if p in files],
+        "missing": missing,
+        "errors": errors,
+        "transport": "mcp",
+    }
+
+
 async def _inspect_files(args: dict[str, Any], start: float) -> ToolExecutionResult:
     """跨主机比对宿主文件指纹 —— 用于"异常只出现在部分节点"时的差分定位。"""
     hosts = [str(h).strip() for h in (args.get("hosts") or []) if str(h).strip()]
@@ -568,7 +651,11 @@ async def _inspect_files(args: dict[str, Any], start: float) -> ToolExecutionRes
         if host == "local":
             per_host.append(await _fingerprint_local(paths, want_hash))
         else:
-            per_host.append(await asyncio.to_thread(remote_skill.fingerprint_files, host, paths, want_hash))
+            host_cfg = remote_skill.get_host(host)
+            if host_cfg is not None and (host_cfg.get("auth") or {}).get("type") == "mcp":
+                per_host.append(await _fingerprint_via_mcp(host, paths, want_hash))
+            else:
+                per_host.append(await asyncio.to_thread(remote_skill.fingerprint_files, host, paths, want_hash))
 
     data: dict[str, Any] = {"hosts": per_host, "differing": _diff_fingerprints(per_host, paths)}
     if len(hosts) > 1 and not data["differing"] and not want_hash:

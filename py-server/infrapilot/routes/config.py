@@ -74,7 +74,9 @@ def ship_status(system_id: str) -> dict[str, Any]:
         raise HTTPException(status_code=404, detail="log system not found")
     if system.get("type") not in ("elk", "es8", "elasticsearch"):
         return {"ok": True, "statuses": []}
-    return {"ok": True, "statuses": store.get_ship_status()}
+    from .. import log_shipper
+
+    return {"ok": True, "statuses": log_shipper.get_ship_status()}
 
 
 async def _check_log_system(system: dict[str, Any]) -> bool:
@@ -281,16 +283,30 @@ async def test_host(name: str) -> dict[str, Any]:
 
 
 async def _test_mcp_connection(host: dict[str, Any]) -> bool:
+    """MCP 主机探活：优先走标准 MCP `initialize`（真实协议探测）。
+
+    兼容遗留部署：endpoint 是 gRPC linux-mcp-server 或其它非 JSON-RPC 服务时，
+    端口可用即视为可达（与 gRPC 时代健康检查等价）。
+    """
+    from .. import mcp_client
+
     endpoint = (host.get("auth") or {}).get("endpoint")
     if not endpoint:
         raise RuntimeError("MCP endpoint not configured")
+    try:
+        info = await mcp_client.ping(endpoint)
+        if isinstance(info, dict) and info.get("name"):
+            return True
+    except Exception:  # noqa: BLE001 - 非 JSON-RPC 端点退回 TCP 探测
+        pass
     target = endpoint.split("://")[-1]
     hostname, _, port_text = target.partition(":")
     port = int(port_text or 8443)
     ok = await _tcp_probe(hostname, port, timeout=5)
     if not ok:
         raise RuntimeError("MCP health check failed")
-    return True
+    # 端口在但不是 MCP JSON-RPC：给配置者一个明确信号而不是静默成功
+    raise RuntimeError("MCP endpoint 端口可达但未返回 MCP JSON-RPC 响应（tools/call 能力未确认）")
 
 
 def _test_ssh_connection_sync(host: dict[str, Any]) -> bool:

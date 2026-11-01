@@ -1,8 +1,8 @@
-"""Agent 离线评测（P2）—— 对应 Node `server/src/agent/eval/`，并补齐 LLM-as-judge 与线上回流。
+"""Agent 离线评测（P2）—— 对应已删除的 Node `server/src/agent/eval/`，并补齐 LLM-as-judge 与线上回流。
 
-- 确定性 check（与 Node 逐字对齐）：`hasTool` / `rootCauseMatches` / `hypothesisStatus`；
+- 确定性 check：`hasTool` / `rootCauseMatches` / `hypothesisStatus`；
 - 新增 `judgeScore`：由 `judge.py` 的 LLM-as-judge 产出 score 后做阈值判定（`evaluate_case` 保持纯函数）；
-- case 存储：复用 Node 的 `server/src/agent/eval/cases/*.json`（存在时），并支持写入 DB
+- case 存储：内置 `infrapilot/eval_cases/*.json`，并支持写入 DB
   （`origin=online` 表示从真实会话回流的 case）；
 - 线上数据回流：`promote_session()` 把一个已结束会话固化为回归 case（含金标准结论 + hasTool + judgeScore）。
 """
@@ -17,22 +17,18 @@ from typing import Any, Optional
 from . import db, judge as judge_mod
 from .util import new_id, now_iso
 
-_REPO_ROOT = Path(__file__).resolve().parent.parent.parent
-_NODE_CASES_DIR = _REPO_ROOT / "server" / "src" / "agent" / "eval" / "cases"
 _PACKAGED_CASES_DIR = Path(__file__).resolve().parent / "eval_cases"
 
 SUPPORTED_CHECKS = ("hasTool", "rootCauseMatches", "hypothesisStatus", "judgeScore")
 
 
 def cases_dir() -> Path:
-    """优先复用 Node 的 cases 目录（与 skills 目录复用策略一致），否则用内置副本。"""
+    """评测 case 目录：内置副本（infrapilot/eval_cases），可用 INFRAPILOT_EVAL_CASES_DIR 覆盖。"""
     import os
 
     override = os.environ.get("INFRAPILOT_EVAL_CASES_DIR")
     if override:
         return Path(override)
-    if _NODE_CASES_DIR.is_dir():
-        return _NODE_CASES_DIR
     return _PACKAGED_CASES_DIR
 
 

@@ -1,0 +1,7 @@
+# 构建上下文为本目录（py-server/）时生效
+data/
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+tests/

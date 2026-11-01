@@ -1,6 +1,13 @@
-# InfraPilot Phase 2：linux-mcp-server 常驻 Agent
+# InfraPilot Phase 2：linux-mcp-server 常驻 Agent（历史设计文档）
 
-## 1. 概述
+> ⚠️ **本文档描述的 gRPC linux-mcp-server 实现已随 Node 后端删除**，本文仅作历史参考。
+>
+> 现行方案：标准 MCP JSON-RPC over HTTP——每节点部署同一份 Python 镜像
+> （`MCP_SERVER_MODE=http python3 -m infrapilot.mcp_server`，`POST /api/mcp`，短期 JWT 鉴权），
+> 清单见 `py-server/k8s-manifests/mcp-agent/`，主 server 侧客户端见
+> `py-server/infrapilot/mcp_client.py`，部署与接入见 `docs/deployment.md` §4.2 / §6。
+
+## 1. 概述（历史）
 
 Phase 2 引入 **linux-mcp-server** 常驻 Agent，作为 DaemonSet/VM Agent 部署在每台 Linux 主机上，通过 **gRPC + 可选 mTLS + 短期 JWT** 提供结构化诊断接口，替代裸 shell 执行；同时保留 Phase 1 的 SSH Proxy 作为无 Agent 主机的降级通道。
 

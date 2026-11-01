@@ -1,6 +1,12 @@
 # SSH Proxy 远程主机命令执行
 
 > 对应设计文档：§7.1 linux-mcp-server、§8.3 安全网关、§13.2 部署架构
+>
+> 本文档描述的 SSH 通道现由 Python 后端实现：主机注册表/白名单/执行见
+> `py-server/infrapilot/remote.py`，路由见 `py-server/infrapilot/skills/linux.py`。
+> 下文出现的 `server/src/...` 为原 Node 实现的历史出处（该后端已删除，
+> 对应关系：remoteExecutor → remote.py，sshHosts → remote.py/config_store.py，
+> commandGateway → gateway.py）。
 
 ## 1. 功能概述
 
@@ -8,6 +14,8 @@
 
 - 当 `host="local"` 时，命令在 InfraPilot 后端所在主机本地执行（原有行为）。
 - 当 `host` 为 Host Registry 中注册的主机别名时，命令通过 **SSH Proxy** 路由到目标主机执行。
+- 当 `host` 为注册表 `auth.type=mcp` 的主机时，走 MCP 通道（见 `py-server/k8s-manifests/mcp-agent/README.md`），
+  不经过本文描述的 SSH Proxy。
 
 Agent、Prompt、前端 UI 无需改动，`host` 参数自然从 `"local"` 扩展到任意已注册主机。
 
@@ -17,13 +25,13 @@ Agent、Prompt、前端 UI 无需改动，`host` 参数自然从 `"local"` 扩�
 用户/Agent
    │
    ▼
-Linux Skill (server/src/skills/linux/tools.ts)
+Linux Skill (py-server/infrapilot/skills/linux.py)
    │
    ▼
-remoteExecutor (server/src/skills/linux/remoteExecutor.ts)
+remote 模块 (py-server/infrapilot/remote.py)
    │ host="local"          │ host="node-1"
    ▼                       ▼
-localRunner              SSH Proxy (server/src/gateway/sshProxy.ts)
+localRunner              SSH Proxy (paramiko)
 (本机 execFile)              │
                              ▼
                         ssh2 Client
@@ -32,7 +40,7 @@ localRunner              SSH Proxy (server/src/gateway/sshProxy.ts)
                         目标远程主机
                              │
                              ▼
-                        Host Registry (server/src/gateway/sshHosts.ts)
+                        Host Registry（remote.py / config_store.py）
                         提供 IP/端口/用户名/私钥/密码
 ```
 
@@ -152,7 +160,7 @@ Agent 调用方式不变，只需在参数中指定 `host`：
 
 远程命令执行会产生两层审计：
 
-1. **SSH Proxy 层审计**（`server/src/gateway/sshProxy.ts`）
+1. **SSH Proxy 层审计**（`py-server/infrapilot/remote.py`）
    - 每次远程执行都会向 `stderr` 输出结构化 JSON 日志，包含：
      - `id`: 唯一事件 ID
      - `host`: 逻辑主机别名
@@ -165,7 +173,7 @@ Agent 调用方式不变，只需在参数中指定 `host`：
    - 示例：`[SSH_AUDIT] {"id":"...","host":"node-1","command":"uptime ","allowed":true,"success":true,"durationMs":50}`
    - 便于接入企业日志采集系统（ELK/Loki/Splunk）。
 
-2. **Command Gateway 层审计**（`server/src/gateway/commandGateway.ts`）
+2. **Command Gateway 层审计**（`py-server/infrapilot/gateway.py`）
    - 所有工具调用（包括本地和远程）都会写入 SQLite `audit_log` 表。
    - 可通过 API `/api/sessions/:id/audit` 查询会话级审计记录。
 
@@ -267,13 +275,9 @@ hostPath 组件（二进制/驱动/配置）是否发生版本漂移 —— 这�
 
 | 文件 | 说明 |
 |---|---|
-| `server/src/gateway/sshHosts.ts` | 主机注册表 |
-| `server/src/gateway/sshProxy.ts` | SSH 代理核心（含审计日志） |
-| `server/src/skills/linux/localRunner.ts` | 本机命令执行器 |
-| `server/src/skills/linux/remoteExecutor.ts` | 本地/远程路由 |
-| `server/src/skills/linux/tools.ts` | Linux Skill 工具 |
-| `server/src/gateway/sshHosts.test.ts` | Host Registry 单元测试 |
-| `server/src/gateway/sshProxy.test.ts` | SSH Proxy 单元/集成测试 |
-| `server/src/gateway/sshProxy.e2e.test.ts` | SSH Proxy 端到端测试（需真实 sshd） |
-| `server/src/skills/linux/remoteExecutor.test.ts` | 路由单元测试 |
-| `server/src/skills/linux/tools.test.ts` | Linux Skill 工具单元测试 |
+| `py-server/infrapilot/remote.py` | Host Registry + SSH 代理核心（白名单 + paramiko 执行 + 审计日志） |
+| `py-server/infrapilot/config_store.py` | runtime-config 中的主机注册表（与 `SSH_HOSTS`/`SSH_HOSTS_CONFIG` 同步） |
+| `py-server/infrapilot/skills/linux.py` | Linux Skill 工具 + local/SSH/MCP 路由 |
+| `py-server/infrapilot/gateway.py` | Command Gateway 层审计（argsHash 防篡改 + 审批记录） |
+| `py-server/infrapilot/redact.py` | 输出脱敏 |
+| `py-server/tests/test_remote_host.py` | Host Registry / 白名单单元测试 |

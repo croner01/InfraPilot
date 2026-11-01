@@ -53,6 +53,10 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /app/data
+            # 日志采集管道（log_shipper）需要读取宿主机容器 CRI 日志
+            - name: varlog
+              mountPath: /var/log/pods
+              readOnly: true
           resources:
             # Python 运行时 + 内置调度器 / 子 Agent / 沙箱，内存比 Node 版略高
             requests:
@@ -83,3 +87,7 @@ spec:
           hostPath:
             path: /var/lib/infrapilot/data
             type: DirectoryOrCreate
+        - name: varlog
+          hostPath:
+            path: /var/log/pods
+            type: Directory

@@ -18,13 +18,17 @@ data:
   # 内置定时任务调度器（进程内 asyncio 轮询）
   INFRAPILOT_SCHEDULER: "1"
   INFRAPILOT_SCHEDULER_TICK: "15"
+  # 日志采集管道：真实 Pod 日志（容器 CRI 落盘格式）→ OpenSearch，见 infrapilot/log_shipper.py。
+  # 需要在 deployment.yaml 中把宿主机 /var/log/pods 只读挂载进容器（已配好）。
+  INFRAPILOT_LOG_SHIPPER: "1"
   # P2 结构化输出 / 上下文压缩（默认开启，这里显式声明便于运维开关）
   INFRAPILOT_STRUCTURED_RCA: "1"
   INFRAPILOT_CONTEXT_COMPRESS: "1"
+  # 可选：MCP 远程主机通道（节点上部署 mcp-agent 时的节点 IP -> endpoint 映射）。
+  # 更推荐用 Host Registry（auth.type=mcp）逐主机注册，见 docs/deployment.md。
+  # MCP_ENDPOINTS: '{"node-1":"10.0.0.11:8443","node-2":"10.0.0.12:8443"}'
   # 强制鉴权（登录 + JWT + RBAC）；开启前请确认前端登录页可用
   # INFRAPILOT_REQUIRE_AUTH: "1"
   # Skill Factory：改用 LLM 生成草稿 / 入库时严格校验工具引用
   # INFRAPILOT_FACTORY_USE_LLM: "1"
   # INFRAPILOT_FACTORY_STRICT_TOOLS: "1"
-  # 说明：Node 版的 MCP_ENDPOINTS（gRPC linux-mcp-server）在 Python 版尚未移植；
-  #       远程主机执行请改用 SSH_HOSTS（见 secret.yaml）。

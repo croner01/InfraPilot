@@ -1,0 +1,105 @@
+# DaemonSet：在每个节点上部署一个 MCP Agent（同一份 py-server 镜像，以 MCP HTTP 模式运行）。
+#
+# 运行模式：MCP_SERVER_MODE=http —— 独立进程提供 POST /api/mcp（标准 MCP JSON-RPC 2.0）。
+# 主 server（infrapilot-server）侧对 auth.type=mcp 的 Host Registry 主机，
+# 经该端点调用 linux__* 工具（见 py-server/infrapilot/mcp_client.py）。
+#
+# 双方共享 mcp-jwt-secret：主 server 将签发短期 HS256 JWT（sub/aud/tools/exp），
+# Agent 用同一密钥校验 Authorization: Bearer <jwt>。
+#
+# Agent 上无需后台排查/采集能力，全部显式关闭：
+#   INFRAPILOT_SCHEDULER=0  INFRAPILOT_LOG_SHIPPER=0
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: linux-mcp-server
+  namespace: infrapilot-mcp
+  labels:
+    app: linux-mcp-server
+spec:
+  selector:
+    matchLabels:
+      app: linux-mcp-server
+  template:
+    metadata:
+      labels:
+        app: linux-mcp-server
+    spec:
+      serviceAccountName: linux-mcp-server
+      hostPID: true
+      hostNetwork: true
+      containers:
+        - name: linux-mcp-server
+          image: localhost:5000/infrapilot/server:latest
+          imagePullPolicy: IfNotPresent
+          command: ["python3", "-m", "infrapilot.mcp_server"]
+          env:
+            - name: MCP_SERVER_MODE
+              value: "http"
+            - name: MCP_SERVER_PORT
+              value: "8443"
+            - name: INFRAPILOT_SCHEDULER
+              value: "0"
+            - name: INFRAPILOT_LOG_SHIPPER
+              value: "0"
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: MCP_JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: mcp-jwt-secret
+                  key: secret
+          ports:
+            - name: http
+              containerPort: 8443
+              hostPort: 8443
+          securityContext:
+            privileged: true
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          volumeMounts:
+            - name: proc
+              mountPath: /proc
+              readOnly: true
+            - name: sys
+              mountPath: /sys
+              readOnly: true
+            - name: varlog
+              mountPath: /var/log
+              readOnly: true
+            - name: run-systemd
+              mountPath: /run/systemd
+            - name: data
+              mountPath: /app/data
+          livenessProbe:
+            tcpSocket:
+              port: 8443
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            tcpSocket:
+              port: 8443
+            initialDelaySeconds: 3
+            periodSeconds: 5
+      volumes:
+        - name: proc
+          hostPath:
+            path: /proc
+        - name: sys
+          hostPath:
+            path: /sys
+        - name: varlog
+          hostPath:
+            path: /var/log
+        - name: run-systemd
+          hostPath:
+            path: /run/systemd
+        - name: data
+          emptyDir: {}

@@ -1,8 +1,9 @@
-"""Draw.io Skill —— 对应 `server/src/skills/drawio/tools.ts`。
+"""Draw.io Skill —— 对应已删除的 `server/src/skills/drawio/tools.ts`。
 
 根据日志/依赖关系生成 draw.io 流程图（.drawio），并可导出 PNG/SVG/PDF。
-导出优先复用 Node 版导出脚本（server/src/skills/drawio/scripts/drawio-to-png.mjs），
-保持与 Node 版一致的 draw.io CLI / headless viewer 回退行为。
+导出复用 `py-server/scripts/drawio-to-png.mjs`（原 Node 导出脚本已随仓库迁移），
+保持与原版一致的 draw.io CLI / headless viewer 回退行为；脚本路径可用
+`DRAWIO_EXPORT_SCRIPT` 环境变量覆盖。
 """
 
 from __future__ import annotations
@@ -19,8 +20,10 @@ from ..settings import DATA_DIR
 from ..util import kill_quietly
 
 DIAGRAMS_DIR = (DATA_DIR / "diagrams").resolve()
-_REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
-EXPORT_SCRIPT = _REPO_ROOT / "server" / "src" / "skills" / "drawio" / "scripts" / "drawio-to-png.mjs"
+_PY_ROOT = Path(__file__).resolve().parent.parent
+EXPORT_SCRIPT = Path(
+    os.environ.get("DRAWIO_EXPORT_SCRIPT") or (_PY_ROOT / "scripts" / "drawio-to-png.mjs")
+)
 
 TOOLS: list[ToolDef] = [
     ToolDef(

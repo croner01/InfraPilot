@@ -1,35 +1,45 @@
 # InfraPilot Python Backend（py-server）
 
-与 `server/`（Node/TypeScript）**API 契约完全一致**的 Python 实现，目标是把后端整体迁移到
-Python（FastAPI）。既有接口（会话/告警/配置/数据源/技能等）保持字节级兼容；`web/` 已进一步
-对接 Python 侧独有能力：用量统计与单价、服务拓扑、JWT 登录与用户管理、Skill Factory、
-Trace 数据源、定时任务、LLM-as-judge 评测、会话产物下载、会话级免审批白名单，以及知识库
-单条详情与逐次 LLM 调用明细。
+InfraPilot 的**唯一后端**（Python/FastAPI）。原 `server/`（Node/TypeScript）已删除，
+本目录完全自包含：技能包、评测 case、drawio 导出脚本、配置示例均随本目录携带；
+Node 独有的两个能力已移植进来——日志采集管道（`infrapilot/log_shipper.py`）与
+MCP 客户端通道（`infrapilot/mcp_client.py`）。
+
+既有接口（会话/告警/配置/数据源/技能等）保持原有契约（错误体统一 `{"error": ...}`）；
+`web/` 已对接 Python 侧独有能力：用量统计与单价、服务拓扑、JWT 登录与用户管理、
+Skill Factory、Trace 数据源、定时任务、LLM-as-judge 评测、会话产物下载、会话级免审批
+白名单，以及知识库单条详情与逐次 LLM 调用明细。
+
+> 历史标注说明：部分模块 docstring 仍写有「对应 `server/src/...`」，这是对已删除 Node
+> 实现的出处注记，仅作追溯用途，不代表现存依赖。
 
 ## 运行
 
 ```bash
 cd py-server
 pip3 install -r requirements.txt
-python3 -m infrapilot            # http://localhost:8787（与 Node 版同端口，二者择一启动）
+python3 -m infrapilot            # http://localhost:8787
 ```
 
-环境变量（与 Node 版同名）：
+环境变量：
 
 - `PORT`（默认 8787）、`OPENAI_BASE_URL` / `GSK_API_KEY` / `OPENAI_API_KEY` / `REASONING_MODEL`
-- `INFRAPILOT_DATA_DIR`（默认 `py-server/data`，与 Node 版 `server/data` 相互隔离）
-- `INFRAPILOT_SKILLS_DIR`（默认复用 `server/skills` 下的 SKILL.md 技能包）
+- `INFRAPILOT_DATA_DIR`（默认 `py-server/data`；容器内为 `/app/data`）
+- `INFRAPILOT_SKILLS_DIR`（SKILL.md 技能包目录，默认 `py-server/skills`）
 - `KUBECONFIG` / `KUBERNETES_SERVICE_HOST`（K8s Skill）
+- `INFRAPILOT_LOG_SHIPPER=0`（关闭 Pod 日志采集管道，默认开启；每节点的 MCP Agent 模式下应关闭）
+- `PODS_LOG_ROOT`（容器 CRI 日志根目录，默认 `/var/log/pods`）
 - `INFRAPILOT_REQUIRE_AUTH=1`（开启强制鉴权；默认关闭以兼容既有前端）
 - `INFRAPILOT_FACTORY_USE_LLM=1`（Skill Factory 改用 LLM 生成，默认确定性模板）
 - `INFRAPILOT_FACTORY_STRICT_TOOLS=1`（入库时强校验 `skill__tool` 引用是否注册）
 - `INFRAPILOT_SCHEDULER=0`（关闭定时任务后台循环，默认开启）、`INFRAPILOT_SCHEDULER_TICK`（轮询秒数，默认 15）
 - `LOG_BACKEND_TYPE=elk|es8`、`OPENSEARCH_USERNAME` / `OPENSEARCH_PASSWORD`（ES8/OpenSearch 基本鉴权）
 - `MCP_SERVER_MODE=stdio|http|true`（独立 MCP 进程，见下）、`MCP_SERVER_PORT`、`MCP_JWT_SECRET`
+- `MCP_ENDPOINTS`（远端节点 MCP endpoint 映射 JSON，如 `{"node-1":"10.0.0.11:8443"}`；示例见 `config/`）
 - `INFRAPILOT_MCP_ALLOW_WRITE=1`（放开 MCP 写类工具，默认仅只读）
 - `INFRAPILOT_STRUCTURED_RCA=0`（关闭结论的 JSON Schema 约束输出，默认开启）
 - `INFRAPILOT_CONTEXT_COMPRESS=0`（关闭会话内上下文压缩，默认开启）、`INFRAPILOT_CONTEXT_MAX_TOKENS`（压缩阈值，默认 60000）
-- `INFRAPILOT_EVAL_CASES_DIR`（评测 case 目录；默认复用 `server/src/agent/eval/cases`）
+- `INFRAPILOT_EVAL_CASES_DIR`（评测 case 目录；默认内置 `infrapilot/eval_cases`）
 
 ## 当前进度
 
@@ -44,7 +54,7 @@ python3 -m infrapilot            # http://localhost:8787（与 Node 版同端口
 | Phase 5 · P2 | ES8 客户端兼容（REST + `compatible-with: 8`）、Trace 数据源（Jaeger/Tempo，5 工具）、定时任务框架（cron 表 + asyncio 循环 + `/api/schedules/*`）、MCP Server 模式（JSON-RPC `/api/mcp` + stdio）、多 Agent 子任务（`subagent__task`）、沙箱代码执行（`interpreter__run_python`） | ✅ 已完成 |
 | Phase 5 · P2（§三 #12–#14） | 结构化输出（JSON Schema 约束 + 三级降级）、上下文超长自动压缩（会话内历史摘要）、LLM-as-judge 评测（`/api/eval/*` + CLI + 线上数据回流） | ✅ 已完成 |
 | Phase 7 · P3 | Artifact 会话产物管理（`/api/artifacts/*`，工具产物自动登记）、A2A 协议服务端（Agent Card + `/api/a2a` JSON-RPC）、端侧 CLI / ChatOps（`python3 -m infrapilot.cli`） | ✅ 已完成 |
-| Phase 6 | 契约对拍（`scripts/contract_diff.py`：静态路由表 + 双后端动态响应形状）、端口切换（`scripts/cutover_check.sh`：py-server 直接监听 8787，经 Vite 代理验证 `/api` + `/ws`）、双跑灰度（文档化策略） | ✅ 已完成 |
+| 单后端整合 | 移除 Node 后端；移植 logShipper（真实 Pod 日志 → OpenSearch/ES8，`/config/log-systems/:id/ship-status` 返回真实状态）；移植 MCP 客户端通道（`auth.type=mcp` 主机经 `/api/mcp` JSON-RPC 调远端 Agent；SSH 主机不变）；镜像/清单/文档单后端化 | ✅ 已完成 |
 
 > 说明：Phase 5 的 P0/P1/P2 划分与 `docs/Agent能力差距分析.md` 第四节路线图一致。
 
@@ -52,17 +62,13 @@ python3 -m infrapilot            # http://localhost:8787（与 Node 版同端口
 
 ```bash
 cd py-server
-python3 -m pytest tests -q                    # 143 项：解析/脱敏/白名单/风险分级/网关/审批/Skill/路由/用量/认证/告警/ES8/定时任务/MCP/子 Agent/沙箱/结构化输出/上下文压缩/评测/产物/会话白名单/A2A(流式+重连)/CLI
-./scripts/smoke_api.sh 8791                   # 76 项 HTTP/WS 端到端契约（需非沙箱环境：本地 socket + 线程）
+python3 -m pytest tests -q                    # 解析/脱敏/白名单/风险分级/网关/审批/Skill/路由/用量/认证/告警/ES8/定时任务/MCP/子 Agent/沙箱/结构化输出/上下文压缩/评测/产物/会话白名单/A2A(流式+重连)/CLI/采集管道/MCP 客户端路由
+./scripts/smoke_api.sh 8791                   # HTTP/WS 端到端契约（需非沙箱环境：本地 socket + 线程）
 
 # 离线评测（真实调用 Agent，消耗 LLM）
 python3 -m infrapilot.eval_run http://localhost:8787
 
-# Phase 6：契约对拍（自动起停 Node + Python 两个后端）
-python3 scripts/contract_diff.py                  # 静态路由表 + 动态响应形状
-python3 scripts/contract_diff.py --static-only    # 仅静态（无需 Node 依赖）
-
-# Phase 6：端口切换验证（py-server 监听 8787 → Vite(5173) 代理 → 前端页面）
+# 端口切换验证（py-server 监听 8787 → Vite(5173) 代理 → 前端页面）
 bash scripts/cutover_check.sh 8787 5173
 ```
 
@@ -73,10 +79,10 @@ bash scripts/cutover_check.sh 8787 5173
 
 ```
 infrapilot/
-  main.py            # FastAPI 入口 + WebSocket /ws + 可选鉴权中间件 + {"error":...} 错误体
+  main.py            # FastAPI 入口 + WebSocket /ws + 可选鉴权中间件 + {"error":...} 错误体 + lifespan 挂日志采集
   routes/
     api.py           # sessions/alerts/demo/k8s/elk/knowledge/memories/topology
-    config.py        # /api/config/*（日志/指标/数据库/主机/LLM/MCP/记忆/模型单价）
+    config.py        # /api/config/*（日志/指标/数据库/主机/LLM/MCP/记忆/模型单价 + ship-status）
     datasources.py   # /api/data-sources/*（Prometheus 查询 + 只读 SQL）
     skills.py        # /api/skills/*（技能包列表/安装/启停 + drawio + Skill Factory）
     usage.py         # /api/usage/*（Token 用量/成本）
@@ -86,7 +92,7 @@ infrapilot/
     eval.py          # /api/eval/*（评测 case/judge/回流/评测记录）
     artifacts.py     # /api/artifacts/*（会话产物登记/列表/下载/删除）
     a2a.py           # /api/a2a（A2A JSON-RPC：message/send、message/stream、tasks/get、tasks/cancel、tasks/resubscribe）
-  db.py              # SQLite 表结构 + 迁移（对应 db/db.ts）
+  db.py              # SQLite 表结构 + 迁移
   sessions.py        # 会话状态与时间线事件
   runner.py          # Agent 可恢复执行循环（含 usage 落库）
   orchestrator.py    # start/resume turn
@@ -98,6 +104,9 @@ infrapilot/
   skill_factory.py   # 会话 → SKILL.md 草稿 → 审核入库
   topology.py        # K8s 服务拓扑发现
   datasource_client.py # 日志数据源 REST 客户端（OpenSearch + ES8 兼容头）
+  log_shipper.py     # 日志采集管道：/var/log/pods CRI 日志 → OpenSearch/ES8（原 Node logShipper 移植）
+  mcp_client.py      # MCP 客户端：mcp 型主机的远端 linux__* 工具调用（原 Node gRPC 通道替代）
+  remote.py          # SSH 通道（host 注册表 + 白名单只读命令 + 指纹比对）
   scheduler.py       # 定时任务框架（cron 解析 + asyncio 轮询 + 到期触发诊断）
   mcp_server.py      # MCP Server（JSON-RPC：initialize/tools/list/tools/call；stdio/http 传输）
   subagent.py        # 子 Agent 派发（独立会话 + 结论回传 + 递归护栏）
@@ -110,12 +119,15 @@ infrapilot/
   artifacts.py       # 会话产物（白名单路径校验 + 从工具结果自动登记）
   a2a.py             # A2A 协议（Agent Card + Task↔Session 映射 + 产物透出 + message/stream / tasks/resubscribe SSE）
   cli.py             # 端侧 CLI / ChatOps（python3 -m infrapilot.cli）
-  eval_cases/        # 内置 case（Node cases 目录不存在时的副本）
+  curated-skills.json # 精选技能包清单（技能市场用）
+  eval_cases/        # 内置评测 case
   skills/            # 各 Skill 的 ToolDef 与执行器（14 个模块）
-  scripts/
-    smoke_api.sh       # HTTP/WS 端到端冒烟（59 项）
-    contract_diff.py   # Phase 6 契约对拍（Node vs Python：路由表 + 响应形状）
-    cutover_check.sh   # Phase 6 端口切换验证（8787 + Vite 代理）
+skills/              # SKILL.md 技能包（prompt 知识包；sre-systematic-debugging 等）
+config/              # ssh-hosts.yaml.example / mcp-endpoints.json.example
+scripts/
+  smoke_api.sh       # HTTP/WS 端到端冒烟
+  cutover_check.sh   # 端口切换验证（8787 + Vite 代理）
+  drawio-to-png.mjs  # draw.io 导出脚本（原 Node 侧共用脚本，git 历史可见迁移）
 tests/               # pytest（纯离线；路由用例需线程，见上）
 ```
 
@@ -151,49 +163,28 @@ python3 -m infrapilot.cli --base http://host:8787 --json ask "..."   # 便于接
 `--json` 输出原始 JSON；`--base`/`INFRAPILOT_BASE_URL`、`--token`/`INFRAPILOT_TOKEN` 控制连接与鉴权；
 `judge` 返回码 0/2 表示 pass/fail，便于 CI 与 ChatOps 判断。
 
-## Phase 6：契约对拍与端口切换
+## 端口切换与镜像
 
-### 契约对拍（`scripts/contract_diff.py`）
-两层比对，结论可复现：
-- **静态路由表**：从 Node 源码提取 `router.<method>("<path>")` + 挂载前缀，与 FastAPI 路由表逐条比对。
-  当前结果：**Node 68 条路由在 Python 侧全部存在（缺失 0）**，Python 额外追加 53 条（P0/P1/P2/P3 新增能力）。
-- **动态响应形状**：隔离数据目录同时启动两个后端（Node 8788 / Python 8789），对同一批端点发请求，
-  递归比较 JSON key/type 签名，并校验错误体是否都是 `{"error": ...}`。
-  判定规则：**缺失字段/类型变化 = 破坏性**；**纯新增字段 = 兼容**（对 JS 前端安全）；
-  Python 独有路由返回 200 而 Node 404 视为追加能力；真实集群端点（k8s）仅作信息性提示。
-  当前结果：**契约一致**（仅 Python 侧追加字段/路由），错误体一致。
-
-### 端口切换（`scripts/cutover_check.sh`）
-前端 `web/vite.config.ts`（dev）与 `web/nginx.conf`（prod）都指向 `8787`/`infrapilot-server:8787`，
-因此切换**无需改前端**，只要让 py-server 占用该端口：
+前端 `web/vite.config.ts`（dev）与 `web/nginx.conf`（prod）都指向 `8787`/`infrapilot-server:8787`；
+py-server 直接监听该端口即可，前端无需任何改动：
 
 ```bash
-# 1) 停掉 Node 后端；2) 以同样端口启动 Python 后端
-cd py-server && PORT=8787 python3 -m infrapilot
-# 3) k8s 环境：把 Deployment/Service 的镜像换成 py-server，Service 端口保持 8787
+cd py-server && python3 -m infrapilot     # PORT=8787
 ```
-
-k8s 生产镜像见 `py-server/Dockerfile`（构建上下文为仓库根目录，需一并打包 `server/skills`）：
-
-```bash
-docker build -f py-server/Dockerfile -t localhost:5000/infrapilot/server:latest .
-```
-
-对应的 Deployment/ConfigMap 已切到 Python 镜像（`server/k8s-manifests/infrapilot-server/`），
-详见 `docs/deployment.md` 第 5、6 节。
 
 `cutover_check.sh` 会启动 py-server(8787) + Vite(5173)，并验证：后端健康检查、前端页面、
 经代理创建/查询会话、错误体、配置/用量/MCP 端点、前端已对接的 auth/topology/skill factory/
 告警 PATCH、trace-systems/schedules/eval/artifacts、会话白名单 / 知识库详情 / 逐调用用量，
 以及经代理的 WebSocket 事件投递。
 
-### 双跑灰度（策略）
-两个后端可同时运行（不同 `PORT` 与 `INFRAPILOT_DATA_DIR`）。灰度做法：
-1. Node 保持 8787（全量流量），Python 跑 8790；
-2. 在 nginx/vite 侧按权重或按路径分组切换（例如先切 `/api/config/*`、`/api/data-sources/*` 等只读前缀）；
-3. 用 `contract_diff.py` + `smoke_api.sh` 对两侧定期对拍，`INFRAPILOT_REQUIRE_AUTH=1` 下核对认证行为；
-4. 观察 `llm_calls` 用量与审计表无异常后，再把主流量切到 Python 并回收 Node 实例。
-> 注意：两侧 `INFRAPILOT_DATA_DIR` 必须隔离，否则会同时写同一份 SQLite/runtime-config。
+生产镜像（构建上下文为本目录）：
+
+```bash
+docker build -f py-server/Dockerfile -t localhost:5000/infrapilot/server:latest py-server
+```
+
+K8s 清单见 `py-server/k8s-manifests/`（`infrapilot-server/` 主服务 + `mcp-agent/` 节点 Agent），
+详见 `docs/deployment.md`。
 
 ## P2 新增能力速览
 
@@ -255,11 +246,39 @@ system 摘要（LLM 结构化摘要，失败则用确定性摘要兜底），保
 ### LLM-as-judge 评测 + 线上数据回流（§三 #14）
 - `judge.py`：按「证据支撑 / 根因准确 / 可执行性 / 幻觉风险」四维打分，输出 `score/verdict/rationale`；
   LLM 不可用时自动降级为确定性启发式评分。
-- `eval.py`：确定性 check（`hasTool` / `rootCauseMatches` / `hypothesisStatus`，与 Node 逐字对齐）
-  + 新增 `judgeScore` 阈值 check；case 复用 `server/src/agent/eval/cases/*.json`。
+- `eval.py`：确定性 check（`hasTool` / `rootCauseMatches` / `hypothesisStatus`）
+  + `judgeScore` 阈值 check；case 存于内置 `infrapilot/eval_cases/*.json`。
 - **线上回流**：`POST /api/eval/promote` 把真实会话固化为回归 case（自动带上用过的工具、金标准结论与
   judge 阈值）；`POST /api/eval/judge` 随时打分；`GET /api/eval/runs` 查历史记录；
   `python3 -m infrapilot.eval_run <base>` 跑全套（参考 `docs/agent-eval.md`）。
+
+## 单后端整合后的新增能力（原 Node 独有能力移植）
+
+### 日志采集管道（`log_shipper.py`）
+真实 K8s Pod 日志 → 真实 OpenSearch/ES8 索引，供 ELK Skill 查询——全链路无编造数据：
+- 数据源：containerd CRI 落盘的 `/var/log/pods/<ns>_<pod>_<uid>/<container>/*.log`
+  （兼容 docker json-file 格式行）；轻量 polling tail + 文件 offset 增量，重启安全、幂等；
+- 写入双通道：`type=elk` 走 OpenSearch SDK，`type=es8` 走 httpx REST + `compatible-with: 8`；
+- 非 JSON 行（启动 banner）以纯文本索引不丢日志；文件截断/轮转自动从头重读；
+- `/api/config/log-systems/:id/ship-status` 返回每目标的真实采集状态（fileCount/lastShippedCount/
+  totalShipped/lastError/警告），不再是占位；
+- 采集目标/索引前缀来自 runtime-config logSystems（`sync_elk_env` 同步进环境变量），热更新生效；
+- lifespan 自动启动，`INFRAPILOT_LOG_SHIPPER=0` 可关闭；K8s 部署需把宿主机 `/var/log/pods`
+  只读挂载进容器（清单已配置）。
+
+### MCP 客户端通道（`mcp_client.py`）
+远程节点执行的 MCP 通道（替代原 Node gRPC linux-mcp-server 方案）：
+- Host Registry 中 `auth.type=="mcp"` 的主机（endpoint 如 `10.0.0.11:8443`）自动经标准 MCP
+  （JSON-RPC 2.0 over HTTP，`POST {endpoint}/api/mcp`）调用对端 `linux__*` 工具；
+  `MCP_ENDPOINTS` 环境变量作为兼容回退；
+- 对端就是本镜像的 MCP Server 模式（`MCP_SERVER_MODE=http python3 -m infrapilot.mcp_server`，
+  每节点一个，K8s 清单 `mcp-agent/` 也可用任意实现 tools/call 的 MCP HTTP 端点）；
+- 远端调用前 `host` 参数归一为 `local` —— 对端 Agent 就在目标节点上本机执行；
+- 主 server 本地签发短期 HS256 JWT（`sub`/`aud=infrapilot-mcp`/`tools` 白名单/`exp`），
+  双方共享 `MCP_JWT_SECRET`；变更类调用给更长超时；
+- `linux.inspect_files` 对 MCP 主机经远端 `linux__run_command` 执行 stat/sha256sum 做指纹比对，
+  结果带 `transport: "mcp"` 标记；SSH 类型主机的通道与白名单语义完全不变；
+- 「测试连接」按钮先做真实 MCP `initialize` 探测，端口可达但非 JSON-RPC 时给出明确错误。
 
 ## 新增 Skill 的方式
 
@@ -268,15 +287,11 @@ system 摘要（LLM 结构化摘要，失败则用确定性摘要兜底），保
 
 Policy Engine 与 Command Gateway 会自动感知（风险等级来自 `ToolDef.risk`）。
 
-## 与 Node 版的差异（已确认）
+## 迁移备注（历史契约）
 
-- `redact`/`plan` 等正则用 `[0-9]` 等价替换 JS `\d` 的 Unicode 语义，输出保持一致。
-- 错误体统一为 `{"error": "..."}`（Node/Express 风格），非 FastAPI 默认的 `detail`。
-- 远程主机执行（`host != "local"`）尚未接入 MCP/SSH 通道，返回明确的“尚未实现”错误。
-- 后台日志采集循环（logShipper）未移植；`/config/log-systems/:id/ship-status` 返回“尚未采集”占位状态。
-- P0 的认证/用量，P2 的定时任务 / MCP Server / 子 Agent / 沙箱执行 / 结构化输出 / 上下文压缩 /
-  LLM-as-judge / 会话级免审批白名单，以及 P3 的会话产物 / A2A / CLI 均为 Python 版新增能力
-  （Node 版缺失；Node 仅有确定性 check 的 CLI 评测）。
-- P3 的 A2A 与 MCP Server 均为**追加**端点，契约对拍确认 Node 68 条路由在 Python 侧全部保留。
-- P2 的「MCP Server 模式」按差距分析 §3 #9 落地为**标准 MCP 协议**（JSON-RPC 2.0），
-  而非 Node 版 gRPC `linux-mcp-server`（后者需 protoc 生成的桩，Python 环境未预装 `grpc_tools`）。
+- 前端依赖的错误体统一为 `{"error": "..."}`（原 Express 风格），FastAPI 默认 `detail` 已被中间件覆盖。
+- `redact`/`plan` 等正则用 `[0-9]` 等价替换 JS `\d` 的 Unicode 语义，输出与原 Node 版一致。
+- 历史 P0/P2/P3 的认证/用量/定时任务/MCP Server/子 Agent/沙箱/结构化输出/压缩/ judge/白名单/
+  产物/A2A/CLI 均为本实现新增能力（原 Node 版缺失）。
+- 「MCP Server 模式」按差距分析 §3 #9 落地为**标准 MCP 协议**（JSON-RPC 2.0）；
+  原 Node 版的 gRPC `linux-mcp-server` 通道已随其删除，替代实现见上文 MCP 客户端通道。

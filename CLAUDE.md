@@ -5,14 +5,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## 项目概述
 
 InfraPilot Agent — AI SRE Agent，面向 Kubernetes / Linux / ELK 基础设施的自主诊断与修复系统。
+单后端：`py-server/`（Python/FastAPI，端口 8787）；原 `server/`（Node/TypeScript）已删除，
+其独有能力（日志采集管道 logShipper、MCP 客户端通道）已移植进 Python 代码。
 
 ### 快速启动
 
 ```bash
-# 后端 (server/)
-cd server
-npm install        # 依赖: express, ws, openai, better-sqlite3, @kubernetes/client-node, @opensearch-project/opensearch
-npm run dev        # tsx watch src/index.ts → http://localhost:8787
+# 后端 (py-server/)
+cd py-server
+pip3 install -r requirements.txt   # fastapi, uvicorn, openai, pydantic, httpx, opensearch-py, kubernetes, paramiko...
+python3 -m infrapilot              # http://localhost:8787
 
 # 前端 (web/)
 cd web
@@ -22,12 +24,14 @@ npm run dev        # vite dev → http://localhost:5173（/api 和 /ws 代理到
 
 ### 数据库
 
-后端自动创建 SQLite 文件 `server/data/infrapilot.sqlite`（WAL 模式），包含 sessions、audit_log、approvals、incident_cases 四张表。生产环境可迁移到 PostgreSQL。
+后端自动创建 SQLite 文件 `py-server/data/infrapilot.sqlite`（`INFRAPILOT_DATA_DIR` 可覆盖），
+包含 sessions、audit_log、approvals、incident_cases、users、alerts、schedules 等 15+ 张表。
+生产环境可挂持久卷（K8s 清单默认 hostPath / PVC）。
 
 ### 构建
 
 ```bash
-cd server && npm run build  # tsc 编译到 dist/
+docker build -f py-server/Dockerfile -t localhost:5000/infrapilot/server:latest py-server
 cd web && npm run build     # tsc -b && vite build
 ```
 
@@ -35,68 +39,65 @@ cd web && npm run build     # tsc -b && vite build
 
 ```
 InfraPilot/
-├── server/                    # Node.js/TypeScript 后端
-│   └── src/
-│       ├── index.ts           # Express + WebSocket 入口，端口 8787
-│       ├── types.ts           # 共享类型：ToolDef, AgentSession, RiskLevel 等
-│       ├── llm/client.ts      # OpenAI 兼容客户端（默认 DeepSeek 后端）
-│       ├── agent/
-│       │   ├── orchestrator.ts # 核心推理循环：intake → planning → tool_exec → approval → observation → rca → report
-│       │   ├── sessionStore.ts # 会话状态管理（内存+SQLite 持久化）+ 审批中断/恢复
-│       │   └── prompts.ts      # System Prompt（SRE 诊断原则、输出格式、故障模式知识）
-│       ├── skills/
-│       │   ├── elk/tools.ts    # ELK Skill：search_logs / aggregate_by_field / get_error_timeline / cluster_similar_errors（数据源：真实 OpenSearch）
-│       │   ├── elk/logShipper.ts # 日志采集管道：Pod CRI 日志 → OpenSearch 索引
-│       │   ├── k8s/tools.ts    # K8s Skill：list_pods / get_pod_status / describe_pod / get_events / patch_resource_limits（数据源：真实 k3s 集群）
-│       │   ├── k8s/client.ts   # @kubernetes/client-node 封装
-│       │   ├── linux/tools.ts  # Linux Skill：get_cpu_usage / get_memory_info / get_disk_usage / get_process_info / tail_recent_dmesg（数据源：宿主机真实命令）
-│       ├── gateway/
-│       │   ├── policy.ts       # Policy Engine：风险五级分级（readonly/low/medium/high/critical）+ 全局黑名单 + diff 预览
-│       │   ├── commandGateway.ts # 命令执行网关：权限校验 + 审计落盘，唯一执行入口
-│       │   └── redact.ts       # 敏感信息脱敏（密码/token/证书等）
-│       ├── routes/api.ts       # REST API：sessions CRUD、messages、approvals、demo 控制
-│       ├── ws/hub.ts           # WebSocket 时间线事件实时推送给前端
-│       ├── db/db.ts            # SQLite 数据库层（sessions / audit_log / approvals / incident_cases）
-│       └── demo/               # 演示故障场景（order-api 真实 OOM 子进程）
-│   └── k8s-manifests/          # 真实 k3s Deployment YAML
-├── web/                        # React 19 + Vite 8 前端
-│   └── src/
-│       ├── App.tsx             # 三栏布局：侧边栏 + Timeline + 右侧 Pod 状态面板
-│       ├── index.css           # 全局样式
-│       └── lib/types.ts        # 前端类型定义
-└── docs/                       # 完整技术设计文档（17章）
+├── py-server/                    # Python/FastAPI 后端（唯一后端）
+│   ├── infrapilot/
+│   │   ├── main.py               # FastAPI 入口（/ws 时间线、{"error":...} 错误体契约、lifespan 挂 log_shipper）
+│   │   ├── models.py             # 共享模型：ToolDef, ToolExecutionResult, AgentSession 等
+│   │   ├── llm.py                # OpenAI 兼容客户端（默认 DeepSeek 后端）
+│   │   ├── runner.py             # Agent 可恢复执行循环（intake → planning → tool_exec → approval → observation → rca）
+│   │   ├── orchestrator.py       # start/resume turn
+│   │   ├── gateway.py            # Command Gateway：审批校验(argsHash 防篡改) + 审计，唯一执行入口
+│   │   ├── policy.py             # Policy Engine：风险五级分级（readonly/low/medium/high/critical）
+│   │   ├── redact.py             # 敏感信息脱敏（密码/token/证书等）
+│   │   ├── log_shipper.py        # 日志采集管道：/var/log/pods CRI 日志 → OpenSearch/ES8（原 Node logShipper 移植）
+│   │   ├── mcp_client.py         # MCP 客户端：远端节点 JSON-RPC /api/mcp 调用（原 Node gRPC 通道替代）
+│   │   ├── remote.py             # SSH 通道：host≠local 时的只读诊断执行
+│   │   ├── routes/               # REST API（sessions/alerts/config/data-sources/skills/auth/usage/schedules/mcp/eval/artifacts/a2a）
+│   │   ├── skills/               # 各 Skill ToolDef + 执行器（linux/k8s/elk/clickhouse/prom/trace/knowledge/openstack/drawio/...）
+│   │   ├── eval_cases/           # 内置评测 case
+│   │   └── scripts/, config/     # drawio 导出脚本、API 冒烟、配置示例
+│   ├── skills/                   # SKILL.md 技能包（prompt 注入用知识包，与 Python 代码 skills/ 不同）
+│   ├── k8s-manifests/            # infrapilot-server（Python 镜像）+ mcp-agent（每节点 MCP Agent DaemonSet）+ order-api 演示负载
+│   └── tests/                    # pytest 离线测试
+├── web/                          # React 19 + Vite 8 前端（Timeline UI）
+└── docs/                         # 完整技术设计文档（17章）
 ```
 
 ### 核心设计思路
 
-1. **Agent 推理循环** — `orchestrator.ts` 中一个显式 while 循环 + OpenAI Function Calling 实现状态机（语义对应 LangGraph）。循环上限 10 次迭代。
-   - 模型通过环境变量 `REASONING_MODEL`/`FAST_MODEL` 配置，默认 `deepseek-v4-pro` / `deepseek-v4-flash`
-   - API Key 优先 `GSK_API_KEY`，其次 `OPENAI_API_KEY`；Base URL 可配置
-2. **Skill 工具系统** — 每个 Skill 导出 `ToolDef[]`（name, description, risk 等级, JSON Schema parameters）和 `executeXxxTool()`。工具命名约定 `{skill}__{tool}`，风险标记在描述中（如 `[k8s][risk=high]`）。
-3. **Policy Engine + Command Gateway** — 只读工具（readonly/low）自动执行；变更工具（medium/high/critical）触发审批。审批用 Promise 阻塞推理循环等待前端决策。执行结果全量写入 audit_log。
-4. **真实数据源** — k8s Skill 连接真实 k3s 集群（`@kubernetes/client-node`），ELK Skill 连接真实 OpenSearch（`@opensearch-project/opensearch`），Linux Skill 执行宿主机真实命令。不再使用模拟数据。
-5. **前端 Timeline** — WebSocket 推送所有 Agent 事件（tool_call_start/result、approval_request/decision、rca_conclusion 等），右侧面板轮询 Pod 实时状态。
+1. **Agent 推理循环** — `runner.py` 显式 while 循环 + OpenAI Function Calling 实现状态机，
+   支持 checkpoint 持久化与 `awaiting_approval` 中断/恢复。模型经 `REASONING_MODEL`/`FAST_MODEL`
+   配置（runtime-config 数据库可能覆盖 env），Key 优先 `GSK_API_KEY`。
+2. **Skill 工具系统** — 每个 Skill 模块导出 `TOOLS: list[ToolDef]` + `async def execute(tool, args)`。
+   工具命名 `{skill}__{tool}`，风险等级在 ToolDef 声明，Policy Engine/Gateway 自动感知。
+3. **Policy Engine + Command Gateway** — 只读工具自动执行；medium+ 强制审批（argsHash 防篡改 +
+   审计落盘）；执行结果全量写 audit_log。
+4. **真实数据源** — k8s Skill 连接真实集群（kubernetes client），ELK Skill 连接真实
+   OpenSearch（SDK 或 ES8 REST 兼容头），Linux Skill 执行宿主机真实命令或经 SSH/MCP 通道到远端节点。
+5. **远端执行双通道** — Host Registry 中 `auth.type=mcp` 的主机经 `mcp_client.py` 调用节点上的
+   MCP Agent（`MCP_SERVER_MODE=http python3 -m infrapilot.mcp_server`，共享 `MCP_JWT_SECRET`）；
+   其余类型走 `remote.py` SSH 白名单只读通道。
+6. **前端 Timeline** — WebSocket 推送所有 Agent 事件，右侧面板轮询 Pod 实时状态。
 
 ### 关键环境依赖
 
-- k3s v1.36.2 单节点集群（kubeconfig: `/home/user/.kube/config`）
-- OpenSearch v2.19.1 单节点（`http://127.0.0.1:9200`，无认证）
+- k3s 单节点集群（kubeconfig）；OpenSearch 单节点 `http://127.0.0.1:9200`
 - API Key 环境变量：`GSK_API_KEY` 或 `OPENAI_API_KEY`
+- 日志采集：`/var/log/pods`（容器内需挂载，见 `py-server/k8s-manifests/infrapilot-server/`）
 
 ### 演示场景
 
-order-api Deployment 存在内存泄漏，触发真实 kubelet OOMKilled 进入 CrashLoopBackOff。Agent 自主诊断流程：
-1. `k8s.list_pods` → 发现异常 Pod
-2. `k8s.describe_pod` → 查看 restartCount / lastState / resources.limits
-3. `elk.search_logs` / `elk.get_error_timeline` → 日志内存增长趋势
-4. `linux.get_memory_info` → 交叉验证宿主机 OOM 记录
-5. 输出根因结论（内存 limit 过低）
-6. `k8s.patch_resource_limits` → 触发审批 → 批准后执行修复
+order-api Deployment 真实内存泄漏 → kubelet OOMKilled → CrashLoopBackOff。
+Agent 自主诊断：`k8s.list_pods` → `k8s.describe_pod` → elk 日志检索/时间线（由 log_shipper
+真实采集落库）→ `linux.get_process_info` 交叉验证 → 根因结论 →
+`k8s.patch_resource_limits` 触发审批 → 批准后修复验证。
 
 ### 增量开发指南
 
-- 新增工具：在对应 Skill 的 tools.ts 中添加 `ToolDef` 条目 + `executeXxxTool()` 分支，风险等级在 ToolDef 中声明
-- 新增 Skill：创建 `src/skills/{newSkill}/tools.ts`，在 `policy.ts` 的 `ALL_TOOLS` 和 `commandGateway.ts` 的 `dispatch()` 中注册
-- 前端扩展：App.tsx 中 `EventCard` 组件按 `type` 渲染不同 UI，参考已有 approval 卡片实现审批交互
-- 后端调试：`npm run dev` 自动热重载（tsx watch）
-- 前端调试：Vite HMR + `/api` `/ws` 代理到后端
+- 新增工具：`infrapilot/skills/<name>.py` 中加 `ToolDef` + execute 分支，并在
+  `infrapilot/skills/__init__.py` 的 `_MODULES` 注册（无单独 policy 注册步骤）。
+- 新增 SKILL.md 知识包：放 `py-server/skills/<name>/SKILL.md`（frontmatter：name/description），
+  运行时按 query 相关性注入 prompt。
+- 后端调试：`python3 -m infrapilot`（uvicorn 无热重载；开发可 `uvicorn infrapilot.main:app --reload`）。
+- 前端调试：Vite HMR + `/api` `/ws` 代理到 8787。
+- 测试：`cd py-server && python3 -m pytest tests -q`；契约冒烟 `./scripts/smoke_api.sh 8791`。

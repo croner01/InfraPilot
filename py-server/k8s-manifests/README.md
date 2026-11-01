@@ -1,29 +1,37 @@
-# K8s Manifests (真实集群接入 - 进行中)
+# K8s Manifests（真实集群接入）
 
-本目录用于存放 order-api 演示工作负载迁移到真实 Kubernetes Deployment 后的 YAML 清单。
+Terraform/Ansible 不在本仓库范围；本目录的项目直接 `kubectl apply -f <子目录>/`。
 
-## 当前 sandbox 基础设施状态(已就绪)
+## 前置基础设施（单节点 k3s 沙箱已就绪）
 
-- **真实单节点 K8s 集群**: 通过 k3s v1.36.2 安装并以 systemd 托管(`systemctl status k3s`),
-  已验证真实调度/拉取镜像/运行容器(测试用 nginx:alpine pod 成功运行)。
-  - kubeconfig: `/home/user/.kube/config` (world-readable, 非 root 用户可直接 `kubectl get pods` 等)
-  - 已禁用 traefik/servicelb/metrics-server/local-storage 等非必要组件以降低内存占用
-  - flannel backend 使用 host-gw(sandbox 不支持 vxlan)
-- **真实 OpenSearch 单节点**: v2.19.1,已移除所有非核心插件(ml/knn/security等)以降至最小内存占用
-  (heap 256MB),通过 systemd 托管(`systemctl status opensearch`),集群健康状态 green。
-  - 端点: `http://127.0.0.1:9200` (安全插件已移除,无需认证,仅供本机访问)
+- **真实单节点 K8s 集群**：k3s（systemd 托管），kubeconfig 可读，
+  已禁用 traefik/servicelb/metrics-server/local-storage 等非必要组件；flannel 使用 host-gw。
+- **真实 OpenSearch 单节点**（v2.19.x，heap 256MB，systemd 托管，green）：
+  `http://127.0.0.1:9200`（安全插件已移除，无需认证，仅供本机访问）。
 
-## 后续代码集成计划(尚未完成,不要认为已完成)
+## 子目录
 
-1. 将 `server/src/demo/orderApiWorker.mjs` 打包为容器镜像(或直接用 node:22-alpine + ConfigMap 挂载脚本),
-   通过本目录下的 Deployment YAML 部署到 order-service namespace,使用真实 resources.limits.memory
-   触发真实 kubelet OOMKilled(不再是 supervisor.ts 模拟的子进程)。
-2. 日志采集管道: 读取 `/var/log/pods/<namespace>_<pod>_<uid>/<container>/*.log` (containerd CRI 日志格式),
-   解析后真实写入/索引到 OpenSearch(`order-api-logs-*` 索引),替代原先直接解析本地文件的 ELK Skill 实现。
-3. 重写 `server/src/skills/k8s/tools.ts`: 使用 `@kubernetes/client-node` 调用真实 K8s API
-   (CoreV1Api.listNamespacedPod / readNamespacedPodStatus / listNamespacedEvent /
-   patchNamespacedDeployment 等),替换 `orderApiSupervisor` 依赖。
-4. 重写 `server/src/skills/elk/tools.ts`: 使用 `@opensearch-project/opensearch` 客户端对真实索引做
-   search/aggregate/date_histogram 查询,替换本地文件解析逻辑。
-5. 相应更新 Agent system prompt 中的环境说明、orchestrator 的证据展示格式、前端 pod-state 面板的字段映射。
-6. 端到端重新验证:真实 K8s Event 时间线 + 真实 OpenSearch 日志查询 + Agent 自主排查修复全链路。
+| 子目录 | 内容 |
+| --- | --- |
+| `infrapilot-server/` | 主 server（Python/FastAPI，`localhost:5000/infrapilot/server` 镜像）+ RBAC/Secret/ConfigMap |
+| `mcp-agent/` | 远程节点 MCP Agent DaemonSet（HTTP 模式 MCP JSON-RPC，见其 README.md） |
+| `order-api-*` | `order-service` 命名空间的演示工作负载（制造真实内存增长与 OOMKilled 故障场景） |
+
+## 演示数据链路（全链路真实数据，无编造）
+
+1. order-api Deployment 真实泄漏内存 → kubelet 真实 OOMKilled → CrashLoopBackOff；
+2. 容器日志由 containerd 按 CRI 格式落盘 `/var/log/pods/<ns>_<pod>_<uid>/<container>/*.log`；
+3. 主 server 内置采集管道 `infrapilot/log_shipper.py`
+   tail 该目录（deployment.yaml 已只读挂载），增量解析后写入 OpenSearch `order-api-logs-*`；
+4. Agent 排查时经 ELK Skill 检索/聚合真实日志，经 K8s Skill 读真实 Pod/Event；
+5. 修复建议落地前经过 Policy Gateway 风险分级 + 人工审批。
+
+## 部署顺序
+
+```bash
+kubectl apply -f py-server/k8s-manifests/infrapilot-server/   # 主 server（含 namespace/rbac/secret）
+kubectl apply -f py-server/k8s-manifests/mcp-agent/          # 可选：远程节点 MCP Agent（DaemonSet）
+kubectl apply -f py-server/k8s-manifests/order-api-*.yaml    # 可选：演示工作负载
+```
+
+镜像构建与推送到 `localhost:5000` 见 `docs/deployment.md`。

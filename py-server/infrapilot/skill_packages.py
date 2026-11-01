@@ -23,10 +23,6 @@ _FRONTMATTER_RE = re.compile(r"^([a-zA-Z0-9_-]+):\s*(.*)$")
 def default_skills_dir() -> Path:
     if os.environ.get("INFRAPILOT_SKILLS_DIR"):
         return Path(os.environ["INFRAPILOT_SKILLS_DIR"]).resolve()
-    # 与 Node 版共存期复用同一份技能包目录（server/skills）
-    repo_server_skills = Path(__file__).resolve().parent.parent.parent / "server" / "skills"
-    if repo_server_skills.is_dir():
-        return repo_server_skills
     return Path(__file__).resolve().parent.parent / "skills"
 
 

@@ -1,4 +1,4 @@
-"""Skill 包安装/卸载 —— 对应 `server/src/skills/packages/installer.ts`。
+"""Skill 包安装/卸载 —— 对应已删除的 `server/src/skills/packages/installer.ts`。
 
 从 GitHub 稀疏克隆 SKILL.md 技能包到 `INFRAPILOT_SKILLS_DIR`，或列出精选技能。
 """
@@ -16,17 +16,14 @@ from typing import Any, Optional
 from . import db
 from .skill_packages import default_skills_dir, load_skill_package, skill_store
 
-_CURATED_PATH = Path(__file__).resolve().parent / "data" / "curated-skills.json"
-_REPO_CURATED = Path(__file__).resolve().parent.parent.parent / "server" / "src" / "skills" / "packages" / "curated-skills.json"
+_CURATED_PATH = Path(__file__).resolve().parent / "curated-skills.json"
 
 
 def list_curated_skills() -> list[dict[str, Any]]:
-    for path in (_CURATED_PATH, _REPO_CURATED):
-        try:
-            return json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            continue
-    return []
+    try:
+        return json.loads(_CURATED_PATH.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
 
 
 def copy_skill_into_place(src: str, target: str) -> str:

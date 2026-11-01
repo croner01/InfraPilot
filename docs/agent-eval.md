@@ -6,8 +6,9 @@
 
 ```bash
 # 需要一个可访问且配置了 LLM key 的实例（本地 8787 或集群 NodePort）
-npm run eval:agent -- http://localhost:8787
-npm run eval:agent -- http://192.168.111.209:30080
+cd py-server
+python3 -m infrapilot.eval_run http://localhost:8787
+python3 -m infrapilot.eval_run http://192.168.111.209:30080
 ```
 
 全过 exit 0，任一失败 exit 1。每个 case 会新建会话并真实调用 Agent（消耗 LLM）。
@@ -35,10 +36,12 @@ check 类型：
 
 1. 在实例上完成一次诊断（或复现某次失败的会话），拿到会话 id。
 2. 用人工/事后分析确定"金标准结论方向"与"必须触达的判别证据"。
-3. 将 message + checks 写入 `server/src/agent/eval/cases/<id>.json`。
+3. 将 message + checks 写入 `py-server/infrapilot/eval_cases/<id>.json`（或用
+   `INFRAPILOT_EVAL_CASES_DIR` 指向自有目录；也可用 `POST /api/eval/promote` 从真实会话一键回流）。
 4. 先跑一次确认通过，再作为回归基线长期维护。
 
 ## 建议
 
-- CI/每日回归：在测试环境起 server + mock LLM 后跑 `npm run eval:agent`，技能改动自动触发。
-- 新增"反向金标准"（如不允许断言"启动即失败"而忽略健康副本），可在 `evaluate.ts` 扩展 check 类型。
+- CI/每日回归：在测试环境起 server + mock LLM 后跑 `python3 -m infrapilot.eval_run`，技能改动自动触发。
+- 新增"反向金标准"（如不允许断言"启动即失败"而忽略健康副本），可在 `py-server/infrapilot/eval.py`
+  扩展 check 类型；`judgeScore` 类型的 LLM 评分见 `py-server/infrapilot/judge.py`。
