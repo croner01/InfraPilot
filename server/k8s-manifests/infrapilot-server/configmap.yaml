@@ -4,18 +4,27 @@ metadata:
   name: infrapilot-server-env
   namespace: infrapilot
 data:
-  NODE_ENV: "production"
   PORT: "8787"
+  # 数据与技能包目录（与 py-server/Dockerfile 中的镜像内路径一致）
+  INFRAPILOT_DATA_DIR: "/app/data"
+  INFRAPILOT_SKILLS_DIR: "/app/skills"
+  INFRAPILOT_EVAL_CASES_DIR: "/app/infrapilot/eval_cases"
+  # LLM 网关（也可在「设置 → 模型配置」中写 runtime-config 覆盖）
   OPENAI_BASE_URL: "https://api.deepseek.com"
   REASONING_MODEL: "deepseek-v4-pro"
   FAST_MODEL: "deepseek-v4-flash"
   # 宿主机 OpenSearch（单节点 k3s 场景）；多节点请改用集群内 Service
   OPENSEARCH_NODE: "http://192.168.111.209:9200"
-  # 如需使用 DeepSeek 的不同模型可在此覆盖
-  # REASONING_MODEL: "deepseek-v4-pro"
-  # FAST_MODEL: "deepseek-v4-flash"
-  #
-  # linux-mcp-server endpoint 映射：key 为注册主机别名，value 为 <ip>:8443
-  # 示例（请替换为实际节点 IP，或使用节点名 + headless service）
-  MCP_ENDPOINTS: "{}"
-  # MCP_DISABLE_SSH_FALLBACK: "false"
+  # 内置定时任务调度器（进程内 asyncio 轮询）
+  INFRAPILOT_SCHEDULER: "1"
+  INFRAPILOT_SCHEDULER_TICK: "15"
+  # P2 结构化输出 / 上下文压缩（默认开启，这里显式声明便于运维开关）
+  INFRAPILOT_STRUCTURED_RCA: "1"
+  INFRAPILOT_CONTEXT_COMPRESS: "1"
+  # 强制鉴权（登录 + JWT + RBAC）；开启前请确认前端登录页可用
+  # INFRAPILOT_REQUIRE_AUTH: "1"
+  # Skill Factory：改用 LLM 生成草稿 / 入库时严格校验工具引用
+  # INFRAPILOT_FACTORY_USE_LLM: "1"
+  # INFRAPILOT_FACTORY_STRICT_TOOLS: "1"
+  # 说明：Node 版的 MCP_ENDPOINTS（gRPC linux-mcp-server）在 Python 版尚未移植；
+  #       远程主机执行请改用 SSH_HOSTS（见 secret.yaml）。

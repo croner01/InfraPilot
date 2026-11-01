@@ -8,7 +8,7 @@ import type OpenAI from "openai";
 export type RiskLevel = "readonly" | "low" | "medium" | "high" | "critical";
 
 export type SkillName = "linux" | "k8s" | "elk" | "clickhouse" | "openstack"
-  | "trace" | "knowledge" | "topology" | "drawio" | "skills";
+  | "trace" | "knowledge" | "topology" | "drawio" | "skills" | "prom";
 
 export interface ToolDef {
   name: string;
@@ -229,7 +229,7 @@ export interface KnowledgeCaseInput {
 }
 
 export type AlertSeverity = "p0" | "p1" | "p2";
-export type AlertStatus = "firing" | "resolved" | "acknowledged";
+export type AlertStatus = "firing" | "resolved" | "acknowledged" | "diagnosing";
 
 export interface Alert {
   id: string;

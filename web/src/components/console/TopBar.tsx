@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { Button } from '../ui/Button.js'
 import './topbar.css'
 
@@ -6,9 +7,10 @@ interface TopBarProps {
   pendingApprovals: number
   activeAlerts: number
   onNewSession: () => void
+  userMenu?: ReactNode
 }
 
-export function TopBar({ connected, pendingApprovals, activeAlerts, onNewSession }: TopBarProps) {
+export function TopBar({ connected, pendingApprovals, activeAlerts, onNewSession, userMenu }: TopBarProps) {
   return (
     <header className="ui-topbar">
       <div className="ui-topbar__brand">
@@ -40,6 +42,7 @@ export function TopBar({ connected, pendingApprovals, activeAlerts, onNewSession
         <Button variant="primary" onClick={onNewSession}>
           + 新建会话
         </Button>
+        {userMenu}
       </div>
     </header>
   )

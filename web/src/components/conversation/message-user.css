@@ -7,9 +7,18 @@
   background: var(--accent-soft);
   border-radius: 12px 12px 4px 12px;
   padding: 11px 15px;
-  font-size: 14.5px;
+  font-size: 13.5px;
+  border: 1px solid rgba(37, 99, 235, 0.22);
   line-height: 1.65;
   white-space: pre-wrap;
   word-break: break-word;
   color: var(--text);
+}
+
+.msg-user__time {
+  margin-top: 5px;
+  font-size: 11px;
+  color: var(--text-3);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }

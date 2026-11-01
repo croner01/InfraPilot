@@ -343,6 +343,10 @@ export function listCases(): CaseRow[] {
   return db.prepare(`SELECT * FROM incident_cases ORDER BY created_at DESC LIMIT 200`).all() as CaseRow[];
 }
 
+export function deleteCase(id: string): boolean {
+  return db.prepare(`DELETE FROM incident_cases WHERE id = ?`).run(id).changes > 0;
+}
+
 // -------------------- timeline_events（会话时间线事件持久化） --------------------
 
 export interface TimelineEventRow {

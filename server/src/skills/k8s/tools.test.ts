@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("./client.js", () => ({
+  deletePod: vi.fn(),
   execPodCommand: vi.fn(),
   getDeployment: vi.fn(),
   isAbnormalPod: vi.fn(),
@@ -14,7 +15,7 @@ vi.mock("./client.js", () => ({
 }));
 
 import { executeK8sTool } from "./tools.js";
-import { execPodCommand, getDeployment, getNode, isAbnormalPod, listPods, topNodes, topPods } from "./client.js";
+import { deletePod, execPodCommand, getDeployment, getNode, isAbnormalPod, listPods, topNodes, topPods } from "./client.js";
 
 const healthy = { name: "kafka-x", namespace: "islap", status: "Running", restartCount: 0, ready: true, startedAt: "2026-08-29T11:50:33Z" };
 const errored = { name: "kafka-y", namespace: "islap", status: "Error", restartCount: 0, ready: false, startedAt: "2026-08-24T19:28:00Z" };
@@ -32,12 +33,13 @@ describe("executeK8sTool", () => {
     const res = await executeK8sTool("list_pods", {});
     expect(res.success).toBe(true);
     const data = res.data as {
-      summary: { total: number; running: number; abnormal: number; byReason: Record<string, number> };
+      summary: { total: number; running: number; abnormal: number; byReason: Record<string, number>; byNode: Record<string, { total: number; running: number; abnormal: number; restarts: number }> };
       running: Array<{ name: string }>;
       pods: Array<{ name: string }>;
     };
     expect(data.summary).toMatchObject({ total: 4, running: 1, abnormal: 3 });
     expect(data.summary.byReason).toMatchObject({ Error: 1, Evicted: 1, Running: 1 });
+    expect(data.summary.byNode).toMatchObject({ 未调度: { total: 4, running: 1, abnormal: 3 } });
     expect(data.running.map((p) => p.name)).toEqual(["kafka-x"]);
     expect(data.pods).toHaveLength(3);
   });
@@ -123,5 +125,15 @@ describe("executeK8sTool", () => {
     expect(res.success).toBe(true);
     expect((res.data as { node: { name: string } }).node.name).toBe("ren-logging");
     expect(getNode).toHaveBeenCalledWith("ren-logging");
+  });
+
+  it("delete_pod calls the client and reports rebuild semantics", async () => {
+    vi.mocked(deletePod).mockResolvedValue(undefined as never);
+    const res = await executeK8sTool("delete_pod", { namespace: "ems", pod_name: "ecp-dashboard-api-abc" });
+    expect(res.success).toBe(true);
+    expect(vi.mocked(deletePod)).toHaveBeenCalledWith("ems", "ecp-dashboard-api-abc");
+    const data = res.data as { deleted: string; note: string };
+    expect(data.deleted).toBe("ems/ecp-dashboard-api-abc");
+    expect(data.note).toContain("重建");
   });
 });

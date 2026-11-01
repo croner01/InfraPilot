@@ -8,7 +8,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import type { ElkBackend, HostEntry, HostRegistry, LogBackend, LlmProvider, McpConfig, MemoryConfig, RuntimeConfig } from "./types.js";
+import type { DatabaseBackend, ElkBackend, HostEntry, HostRegistry, LogBackend, LlmProvider, McpConfig, MemoryConfig, PrometheusBackend, RuntimeConfig } from "./types.js";
 
 // 与 db.ts 保持一致：测试环境通过 INFRAPILOT_DATA_DIR 隔离运行时配置
 const DATA_DIR = process.env.INFRAPILOT_DATA_DIR
@@ -95,6 +95,71 @@ function syncElkEnv(systems: LogBackend[]) {
     process.env.OPENSEARCH_NODE = elk.node;
     process.env.LOG_SHIP_TARGETS = JSON.stringify(elk.targets);
   }
+}
+
+// -------------------- Metric Systems (Prometheus) --------------------
+
+export function getMetricSystems(): PrometheusBackend[] {
+  return load().metricSystems ?? [];
+}
+
+export function getEnabledMetricSystems(): PrometheusBackend[] {
+  return getMetricSystems().filter((b) => b.enabled);
+}
+
+export function getDefaultPrometheusBackend(): PrometheusBackend | undefined {
+  return getMetricSystems().find((b) => b.type === "prometheus" && b.enabled) ??
+    getMetricSystems().find((b) => b.type === "prometheus");
+}
+
+export function setMetricSystems(systems: PrometheusBackend[]) {
+  const current = load();
+  current.metricSystems = systems;
+  save(current);
+}
+
+export function upsertMetricSystem(backend: PrometheusBackend) {
+  const current = load();
+  const systems = (current.metricSystems ?? []).filter((b) => b.id !== backend.id);
+  systems.push(backend);
+  current.metricSystems = systems;
+  save(current);
+}
+
+export function deleteMetricSystem(id: string) {
+  const current = load();
+  current.metricSystems = (current.metricSystems ?? []).filter((b) => b.id !== id);
+  save(current);
+}
+
+// -------------------- Database Systems (只读查询) --------------------
+
+export function getDatabaseSystems(): DatabaseBackend[] {
+  return load().databaseSystems ?? [];
+}
+
+export function getEnabledDatabaseSystems(): DatabaseBackend[] {
+  return getDatabaseSystems().filter((b) => b.enabled);
+}
+
+export function setDatabaseSystems(systems: DatabaseBackend[]) {
+  const current = load();
+  current.databaseSystems = systems;
+  save(current);
+}
+
+export function upsertDatabaseSystem(backend: DatabaseBackend) {
+  const current = load();
+  const systems = (current.databaseSystems ?? []).filter((b) => b.id !== backend.id);
+  systems.push(backend);
+  current.databaseSystems = systems;
+  save(current);
+}
+
+export function deleteDatabaseSystem(id: string) {
+  const current = load();
+  current.databaseSystems = (current.databaseSystems ?? []).filter((b) => b.id !== id);
+  save(current);
 }
 
 // -------------------- Remote Hosts --------------------

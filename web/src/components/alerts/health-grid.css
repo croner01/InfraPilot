@@ -15,6 +15,22 @@
 .health-card--alert {
   border-color: var(--alert-border);
 }
+.health-card--clickable {
+  /* <button> 复位，保持卡片外观一致 */
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  width: 100%;
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.health-card--clickable:hover {
+  border-color: var(--accent);
+}
+.health-card--clickable:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
 .health-card__head {
   display: flex;
   align-items: center;

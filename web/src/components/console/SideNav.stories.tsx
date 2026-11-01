@@ -12,9 +12,5 @@ export const Default: Story = {
   args: {
     activeView: 'sessions',
     alertCount: 3,
-    activeSessions: [],
-    closedSessions: [],
-    currentId: null,
-    search: '',
   },
 }

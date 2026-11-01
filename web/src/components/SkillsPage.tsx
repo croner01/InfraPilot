@@ -1,13 +1,20 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
+  approveFactoryDraft,
   exportDrawioDiagram,
+  generateFactoryDraft,
   generateDrawioFlowchart,
   installSkill,
   listCuratedSkills,
+  listFactoryPending,
+  listFactorySessions,
   listSkills,
+  rejectFactoryDraft,
   setSkillEnabled,
   uninstallSkill,
   type CuratedSkill,
+  type FactoryDraft,
+  type FactorySession,
   type LogRelation,
   type SkillPackageInfo,
   downloadDrawioUrl,
@@ -20,29 +27,84 @@ interface SkillsPageProps {
   notify: NotifyFn;
 }
 
+type SkillTab = "market" | "installed" | "factory" | "drawio";
+
+const TABS: Array<{ key: SkillTab; label: string; desc: string }> = [
+  { key: "market", label: "技能市场", desc: "安装开源 SKILL.md 技能包" },
+  { key: "installed", label: "已安装技能", desc: "启停与卸载" },
+  { key: "factory", label: "Skill Factory", desc: "从诊断会话自主生成技能" },
+  { key: "drawio", label: "流程图生成", desc: "依赖关系导出 draw.io" },
+];
+
 export function SkillsPage({ notify }: SkillsPageProps) {
+  const [tab, setTab] = useState<SkillTab>("market");
   return (
     <div className="skills-page">
       <div className="page-header">
         <h1 className="page-header__title">技能中心</h1>
-        <p className="page-header__subtitle">技能包管理：安装开源 SKILL.md、启停诊断方法论，扩展 AI Agent 能力</p>
+        <p className="page-header__subtitle">安装开源技能、管理已装技能，并支持从诊断会话自主沉淀新技能</p>
+      </div>
+      <div className="skills-tabs">
+        {TABS.map((t) => (
+          <button
+            key={t.key}
+            className={`skills-tab${tab === t.key ? " skills-tab--active" : ""}`}
+            onClick={() => setTab(t.key)}
+          >
+            <span className="skills-tab__label">{t.label}</span>
+            <span className="skills-tab__desc">{t.desc}</span>
+          </button>
+        ))}
       </div>
       <div className="main__content">
-        <SkillPackagesSection notify={notify} />
-        <InstallSkillSection notify={notify} />
-        <DrawioFlowchartSkill notify={notify} />
+        {tab === "market" && <SkillMarketSection notify={notify} />}
+        {tab === "installed" && <SkillPackagesSection notify={notify} />}
+        {tab === "factory" && <SkillFactorySection notify={notify} />}
+        {tab === "drawio" && <DrawioFlowchartSkill notify={notify} />}
       </div>
     </div>
   );
 }
 
-function InstallSkillSection({ notify }: { notify: NotifyFn }) {
+/* ================= 技能市场 ================= */
+
+/** 开源技能生态索引（前端演示；后端可扩展远程索引源） */
+const ECO_SOURCES: Array<{
+  repo: string;
+  label: string;
+  desc: string;
+  skills: Array<{ path: string; name: string; description: string }>;
+}> = [
+  {
+    repo: "anthropics/skills",
+    label: "anthropics/skills",
+    desc: "Anthropic 官方技能仓库",
+    skills: [
+      { path: "skills/pdf", name: "pdf", description: "PDF 阅读与文本抽取，报告归档场景" },
+      { path: "skills/docx", name: "docx", description: "Word 文档生成，诊断报告导出" },
+      { path: "skills/xlsx", name: "xlsx", description: "Excel 表格处理，指标报表生成" },
+      { path: "skills/pptx", name: "pptx", description: "PPT 生成，复盘汇报材料" },
+    ],
+  },
+  {
+    repo: "openai/skills",
+    label: "openai/skills",
+    desc: "OpenAI 官方实验性技能",
+    skills: [
+      { path: "skills/.experimental/ceph-rbd-108", name: "ceph-rbd-108", description: "Ceph RBD 存储故障排查" },
+      { path: "skills/.experimental/k8s-pending-pod", name: "k8s-pending-pod", description: "K8s Pod Pending 根因排查" },
+    ],
+  },
+];
+
+function SkillMarketSection({ notify }: { notify: NotifyFn }) {
   const [curated, setCurated] = useState<CuratedSkill[]>([]);
   const [repo, setRepo] = useState("");
   const [skillPath, setSkillPath] = useState("");
   const [ref, setRef] = useState("");
   const [token, setToken] = useState("");
   const [installing, setInstalling] = useState(false);
+  const [progress, setProgress] = useState<string>("");
 
   useEffect(() => {
     listCuratedSkills((err) => notify(err.message)).then((res) => {
@@ -50,9 +112,9 @@ function InstallSkillSection({ notify }: { notify: NotifyFn }) {
     });
   }, []);
 
-  const fill = (c: CuratedSkill) => {
-    setRepo(c.repo);
-    setSkillPath(c.path);
+  const fill = (r: string, p: string) => {
+    setRepo(r);
+    setSkillPath(p);
   };
 
   const handleInstall = async () => {
@@ -61,15 +123,21 @@ function InstallSkillSection({ notify }: { notify: NotifyFn }) {
       return;
     }
     setInstalling(true);
+    // 模拟安装阶段提示（真实安装仍走后端 git sparse-checkout）
+    const steps = ["克隆仓库…", "校验 SKILL.md…", "复制技能文件…", "刷新注册表…"];
+    let i = 0;
+    setProgress(steps[0]);
+    const timer = window.setInterval(() => {
+      i = Math.min(i + 1, steps.length - 1);
+      setProgress(steps[i]);
+    }, 400);
     const res = await installSkill(
-      {
-        repo: repo.trim(),
-        path: skillPath.trim(),
-        ref: ref.trim() || undefined,
-        token: token.trim() || undefined,
-      },
-      (err) => notify(err.message)
+      { repo: repo.trim(), path: skillPath.trim(), ref: ref.trim() || undefined, token: token.trim() || undefined },
+      (err) => notify(err.message),
     );
+    window.clearInterval(timer);
+    setInstalling(false);
+    setProgress("");
     if (res) {
       notify(`${res.name} 安装成功，下一轮诊断自动生效`, "success");
       setRepo("");
@@ -77,53 +145,222 @@ function InstallSkillSection({ notify }: { notify: NotifyFn }) {
       setRef("");
       setToken("");
     }
-    setInstalling(false);
+  };
+
+  return (
+    <>
+      <section className="skill-card">
+        <div className="skill-card__header">
+          <div className="skill-card__icon">🛒</div>
+          <div>
+            <h2 className="skill-card__title">开源技能生态</h2>
+            <p className="skill-card__desc">点击卡片快速填入安装参数；支持任意 GitHub 仓库中的 SKILL.md 技能包。</p>
+          </div>
+        </div>
+        <div className="skill-card__body">
+          {ECO_SOURCES.map((src) => (
+            <div key={src.repo} className="eco-source">
+              <div className="eco-source__head">
+                <span className="eco-source__repo">{src.label}</span>
+                <span className="eco-source__desc">{src.desc}</span>
+              </div>
+              <div className="eco-grid">
+                {src.skills.map((s) => {
+                  const installed = curated.some((c) => c.repo === src.repo && c.path === s.path);
+                  return (
+                    <div key={s.path} className="eco-card" onClick={() => fill(src.repo, s.path)} title="点击填入安装表单">
+                      <div className="eco-card__top">
+                        <span className="eco-card__name">{s.name}</span>
+                        {installed ? <span className="tag">已收录</span> : <span className="tag tag--accent">可安装</span>}
+                      </div>
+                      <p className="eco-card__desc">{s.description}</p>
+                      <code className="eco-card__path">{s.path}</code>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+          <div className="settings-hint">
+            需要更多来源？直接在下方表单填写 <code>repo / path</code> 安装社区技能；安全扫描与签名校验为规划能力。
+          </div>
+        </div>
+      </section>
+
+      <section className="skill-card">
+        <div className="skill-card__header">
+          <div className="skill-card__icon">⬇️</div>
+          <div>
+            <h2 className="skill-card__title">安装技能包</h2>
+            <p className="skill-card__desc">从 GitHub 仓库安装（git sparse-checkout），安装后默认启用。</p>
+          </div>
+        </div>
+        <div className="skill-card__body">
+          {curated.length > 0 && (
+            <div className="curated-list">
+              {curated.map((c) => (
+                <button key={`${c.repo}/${c.path}`} className="curated-chip" onClick={() => fill(c.repo, c.path)} title={c.description}>
+                  {c.name}
+                </button>
+              ))}
+            </div>
+          )}
+          <div className="install-form">
+            <div className="install-form__row">
+              <input className="input" placeholder="repo，如 anthropics/skills" value={repo} onChange={(e) => setRepo(e.target.value)} />
+              <input className="input" placeholder="path，如 skills/pdf" value={skillPath} onChange={(e) => setSkillPath(e.target.value)} />
+            </div>
+            <div className="install-form__row">
+              <input className="input" placeholder="ref（可选，默认 main）" value={ref} onChange={(e) => setRef(e.target.value)} />
+              <input className="input" placeholder="token（可选，私有仓库）" type="password" value={token} onChange={(e) => setToken(e.target.value)} />
+            </div>
+            <div className="install-form__actions">
+              <button className="btn btn--primary" onClick={handleInstall} disabled={installing}>
+                {installing ? "安装中..." : "安装"}
+              </button>
+              {installing && progress && <span className="install-progress">{progress}</span>}
+            </div>
+          </div>
+        </div>
+      </section>
+    </>
+  );
+}
+
+/* ================= Skill Factory（自主生成） ================= */
+
+function SkillFactorySection({ notify }: { notify: NotifyFn }) {
+  const [step, setStep] = useState(1);
+  const [sessions, setSessions] = useState<FactorySession[]>([]);
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [name, setName] = useState("");
+  const [content, setContent] = useState("");
+  const [generating, setGenerating] = useState(false);
+  const [pending, setPending] = useState<FactoryDraft[]>([]);
+
+  const loadSessions = useCallback(async () => {
+    const res = await listFactorySessions((err) => notify(err.message));
+    if (res) setSessions(res.sessions);
+  }, [notify]);
+
+  const loadPending = useCallback(async () => {
+    const res = await listFactoryPending((err) => notify(err.message));
+    if (res) setPending(res.drafts);
+  }, [notify]);
+
+  useEffect(() => {
+    void loadSessions();
+    void loadPending();
+  }, [loadSessions, loadPending]);
+
+  const generate = async () => {
+    if (!sessionId) return;
+    setGenerating(true);
+    const res = await generateFactoryDraft(sessionId, (err) => notify(err.message));
+    setGenerating(false);
+    if (!res) return;
+    setName(res.name);
+    setContent(res.content);
+    setStep(2);
+    notify("已从会话时间线提取 playbook，生成预览", "success");
+  };
+
+  const submitDraft = async () => {
+    if (!name.trim()) {
+      notify("请填写技能名称");
+      return;
+    }
+    const res = await approveFactoryDraft(name.trim(), content, (err) => notify(err.message));
+    if (!res) return;
+    notify(`技能 ${res.name} 已入库`, "success");
+    setStep(3);
+    void loadPending();
+  };
+
+  const discardDraft = async (draftName: string) => {
+    const res = await rejectFactoryDraft(draftName, (err) => notify(err.message));
+    if (!res) return;
+    notify("草稿已丢弃", "success");
+    void loadPending();
   };
 
   return (
     <section className="skill-card">
       <div className="skill-card__header">
-        <div className="skill-card__icon">⬇️</div>
+        <div className="skill-card__icon">🏭</div>
         <div>
-          <h2 className="skill-card__title">安装技能包</h2>
-          <p className="skill-card__desc">从 GitHub 仓库安装开源 SKILL.md 技能（git sparse-checkout），安装后默认启用。</p>
+          <h2 className="skill-card__title">Skill Factory — 自主生成技能</h2>
+          <p className="skill-card__desc">
+            从历史诊断会话中提取时间线与结论，由 LLM 生成标准化 SKILL.md playbook，人工审核后入库供后续诊断召回。
+          </p>
+        </div>
+        <div className="factory-steps">
+          {["选择会话", "生成预览", "审核入库"].map((s, i) => (
+            <span key={s} className={`factory-step${step > i ? " factory-step--done" : ""}${step === i + 1 ? " factory-step--active" : ""}`}>
+              {i + 1}. {s}
+            </span>
+          ))}
         </div>
       </div>
       <div className="skill-card__body">
-        {curated.length > 0 && (
-          <div className="curated-list">
-            {curated.map((c) => (
-              <button key={`${c.repo}/${c.path}`} className="curated-chip" onClick={() => fill(c)} title={c.description}>
-                {c.name}
+        {step === 1 && (
+          <>
+            <div className="factory-session-list">
+              {sessions.length === 0 && <div className="settings-hint">暂无已得出结论的会话，先完成一次诊断后再来沉淀。</div>}
+              {sessions.map((s) => (
+                <label key={s.id} className={`factory-session${sessionId === s.id ? " factory-session--selected" : ""}`}>
+                  <input
+                    type="radio"
+                    name="factory-session"
+                    checked={sessionId === s.id}
+                    onChange={() => setSessionId(s.id)}
+                  />
+                  <div className="factory-session__main">
+                    <div className="factory-session__title">{s.title}</div>
+                    <div className="factory-session__meta">
+                      结论：{s.concluded?.summary ?? "—"} · {s.planSteps ?? 0} 步 · 工具 {(s.tools ?? []).join(" / ") || "—"}
+                    </div>
+                  </div>
+                </label>
+              ))}
+            </div>
+            <div className="skill-card__actions">
+              <button className="btn btn--primary" disabled={!sessionId || generating} onClick={generate}>
+                {generating ? "提取时间线并生成中…" : "下一步：生成 SKILL.md 预览"}
               </button>
+            </div>
+          </>
+        )}
+        {step >= 2 && (
+          <>
+            <div className="form-group">
+              <label className="form-label">技能名称（skill 标识）</label>
+              <input className="input" value={name} onChange={(e) => setName(e.target.value)} />
+            </div>
+            <div className="form-group">
+              <label className="form-label">SKILL.md 内容（可编辑）</label>
+              <textarea className="factory-editor" value={content} onChange={(e) => setContent(e.target.value)} rows={16} spellCheck={false} />
+            </div>
+            <div className="skill-card__actions">
+              <button className="btn" onClick={() => setStep(1)}>← 上一步</button>
+              <span className="factory-hint">提交后由 Policy Engine 校验工具名与 allowlist，通过后写入技能库。</span>
+              <button className="btn btn--primary" onClick={submitDraft}>提交审核入库</button>
+            </div>
+          </>
+        )}
+        {pending.length > 0 && (
+          <div className="factory-session-list" style={{ marginTop: 12 }}>
+            <div className="settings-hint">待审核草稿：</div>
+            {pending.map((d) => (
+              <div key={d.name} className="factory-session">
+                <div className="factory-session__main">
+                  <div className="factory-session__title">{d.name}</div>
+                </div>
+                <button className="btn btn--sm btn--danger-ghost" onClick={() => discardDraft(d.name)}>丢弃</button>
+              </div>
             ))}
           </div>
         )}
-        <div className="install-form">
-          <div className="install-form__row">
-            <input
-              className="input"
-              placeholder="repo，如 openai/skills"
-              value={repo}
-              onChange={(e) => setRepo(e.target.value)}
-            />
-            <input
-              className="input"
-              placeholder="path，如 skills/.experimental/ceph-rbd-108"
-              value={skillPath}
-              onChange={(e) => setSkillPath(e.target.value)}
-            />
-          </div>
-          <div className="install-form__row">
-            <input className="input" placeholder="ref（可选，默认 main）" value={ref} onChange={(e) => setRef(e.target.value)} />
-            <input className="input" placeholder="token（可选，私有仓库）" type="password" value={token} onChange={(e) => setToken(e.target.value)} />
-          </div>
-          <div>
-            <button className="btn btn--primary" onClick={handleInstall} disabled={installing}>
-              {installing ? "安装中..." : "安装"}
-            </button>
-          </div>
-        </div>
       </div>
     </section>
   );
@@ -183,7 +420,7 @@ function SkillPackagesSection({ notify }: { notify: NotifyFn }) {
         {loading ? (
           <div className="empty-hint">加载中...</div>
         ) : skills.length === 0 ? (
-          <div className="empty-hint">暂无已安装技能包，可在下方安装。</div>
+          <div className="empty-hint">暂无已安装技能包，可在「技能市场」安装。</div>
         ) : (
           <div className="skill-package-grid">
             {skills.map((s) => {
@@ -203,21 +440,12 @@ function SkillPackagesSection({ notify }: { notify: NotifyFn }) {
                   </div>
                   <div className="skill-package-card__actions">
                     <label className="toggle">
-                      <input
-                        type="checkbox"
-                        checked={s.enabled}
-                        disabled={busy === s.name}
-                        onChange={() => handleToggle(s)}
-                      />
+                      <input type="checkbox" checked={s.enabled} disabled={busy === s.name} onChange={() => handleToggle(s)} />
                       <span className="toggle__track" />
                       <span className="toggle__label">{s.enabled ? "启用" : "禁用"}</span>
                     </label>
                     {!builtin && (
-                      <button
-                        className="btn btn--sm btn--danger-ghost"
-                        disabled={busy === s.name}
-                        onClick={() => handleUninstall(s)}
-                      >
+                      <button className="btn btn--sm btn--danger-ghost" disabled={busy === s.name} onClick={() => handleUninstall(s)}>
                         卸载
                       </button>
                     )}
@@ -231,6 +459,8 @@ function SkillPackagesSection({ notify }: { notify: NotifyFn }) {
     </section>
   );
 }
+
+/* ================= Draw.io 流程图 ================= */
 
 function DrawioFlowchartSkill({ notify }: { notify: NotifyFn }) {
   const [title, setTitle] = useState("日志调用关系流程图");
@@ -340,25 +570,10 @@ function DrawioFlowchartSkill({ notify }: { notify: NotifyFn }) {
           <div className="relation-list">
             {relations.map((rel, i) => (
               <div key={i} className="relation-row">
-                <input
-                  className="input input--sm"
-                  placeholder="源节点"
-                  value={rel.source}
-                  onChange={(e) => updateRelation(i, "source", e.target.value)}
-                />
+                <input className="input input--sm" placeholder="源节点" value={rel.source} onChange={(e) => updateRelation(i, "source", e.target.value)} />
                 <span className="relation-arrow">→</span>
-                <input
-                  className="input input--sm"
-                  placeholder="目标节点"
-                  value={rel.target}
-                  onChange={(e) => updateRelation(i, "target", e.target.value)}
-                />
-                <input
-                  className="input input--sm"
-                  placeholder="关系标签"
-                  value={rel.relation}
-                  onChange={(e) => updateRelation(i, "relation", e.target.value)}
-                />
+                <input className="input input--sm" placeholder="目标节点" value={rel.target} onChange={(e) => updateRelation(i, "target", e.target.value)} />
+                <input className="input input--sm" placeholder="关系标签" value={rel.relation} onChange={(e) => updateRelation(i, "relation", e.target.value)} />
                 <button className="btn btn--sm btn--danger-ghost" onClick={() => removeRelation(i)}>删除</button>
               </div>
             ))}

@@ -1,0 +1,893 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>InfraPilot · 诊断会话 — Agent 执行原型（Cortex / Kimi 风格）</title>
+<style>
+  :root {
+    --bg: #f6f7f9;
+    --panel: #ffffff;
+    --panel-2: #fafbfc;
+    --border: #e4e7ec;
+    --border-strong: #d0d5dd;
+    --text-1: #1a2233;
+    --text-2: #4b5565;
+    --text-3: #8a93a6;
+    --accent: #2563eb;
+    --accent-soft: rgba(37, 99, 235, 0.09);
+    --success: #16a34a;
+    --success-soft: rgba(22, 163, 74, 0.1);
+    --warning: #d97706;
+    --warning-soft: rgba(217, 119, 6, 0.12);
+    --danger: #dc2626;
+    --danger-soft: rgba(220, 38, 38, 0.08);
+    --info: #0891b2;
+    --info-soft: rgba(8, 145, 178, 0.1);
+    --purple: #7c3aed;
+    --purple-soft: rgba(124, 58, 237, 0.09);
+    --radius: 10px;
+    --radius-sm: 6px;
+    --shadow: 0 1px 2px rgba(16, 24, 40, 0.05);
+    --mono: "JetBrains Mono", "Cascadia Code", Consolas, monospace;
+    --sans: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-thumb { background: #d5dae2; border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: #bcc3cf; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  html, body { height: 100%; }
+  body { font-family: var(--sans); background: var(--bg); color: var(--text-1); font-size: 14px; display: flex; overflow: hidden; }
+
+  /* ============ 左侧导航 ============ */
+  .sidenav {
+    width: 190px; flex-shrink: 0;
+    background: var(--panel);
+    border-right: 1px solid var(--border);
+    display: flex; flex-direction: column;
+    padding: 14px 10px;
+  }
+  .sidenav__brand { display: flex; align-items: center; gap: 9px; padding: 4px 10px 16px; }
+  .sidenav__logo {
+    width: 30px; height: 30px; border-radius: 8px;
+    background: linear-gradient(135deg, #2563eb, #7c3aed);
+    display: grid; place-items: center; color: #fff; font-weight: 700; font-size: 14px;
+  }
+  .sidenav__brand-name { font-weight: 700; font-size: 15px; }
+  .sidenav__brand-name small { display: block; font-size: 10px; font-weight: 500; color: var(--text-3); letter-spacing: 1px; }
+  .sidenav__group-label { font-size: 11px; color: var(--text-3); padding: 8px 12px 4px; letter-spacing: 0.5px; }
+  .sidenav__item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 12px; border-radius: var(--radius-sm);
+    color: var(--text-2); cursor: pointer; font-size: 13.5px;
+  }
+  .sidenav__item:hover { background: var(--panel-2); color: var(--text-1); }
+  .sidenav__item.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+  .sidenav__item svg { width: 16px; height: 16px; flex-shrink: 0; }
+
+  /* ============ 会话列表列 ============ */
+  .session-col {
+    width: 240px; flex-shrink: 0;
+    background: var(--panel);
+    border-right: 1px solid var(--border);
+    display: flex; flex-direction: column;
+    transition: width 0.18s ease, border-color 0.18s;
+    overflow: hidden;
+  }
+  .session-col.collapsed { width: 0; border-right-color: transparent; }
+  .session-col__header {
+    padding: 16px 16px 12px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 8px;
+    min-width: 240px;
+  }
+  .session-col__title { font-weight: 700; font-size: 15px; flex: 1; white-space: nowrap; }
+  .btn-new {
+    width: 26px; height: 26px; border-radius: var(--radius-sm);
+    border: 1px solid var(--border-strong); background: var(--panel);
+    display: grid; place-items: center; cursor: pointer; color: var(--text-2);
+    flex-shrink: 0; font-size: 13px;
+  }
+  .btn-new:hover { border-color: var(--accent); color: var(--accent); }
+  .btn-collapse {
+    width: auto; min-width: 26px; height: 26px; padding: 0 7px;
+    border-radius: var(--radius-sm);
+    border: 1px solid transparent; background: transparent;
+    display: inline-flex; align-items: center; justify-content: center; gap: 3px;
+    cursor: pointer; color: var(--text-3);
+    flex-shrink: 0; font-size: 12.5px; font-family: inherit;
+    white-space: nowrap;
+  }
+  .btn-collapse:hover { border-color: var(--border-strong); color: var(--accent); }
+  .session-col__search { padding: 10px 14px; min-width: 240px; }
+  .session-col__search input {
+    width: 100%; border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
+    padding: 7px 10px; font-size: 13px; outline: none; background: var(--panel-2);
+  }
+  .session-list { flex: 1; overflow-y: auto; padding: 6px; }
+  .session-item {
+    padding: 11px 12px; border-radius: var(--radius-sm);
+    cursor: pointer; margin-bottom: 2px;
+    border: 1px solid transparent;
+    position: relative;
+  }
+  .session-item:hover { background: var(--panel-2); }
+  .session-item.active { background: var(--accent-soft); border-color: rgba(37, 99, 235, 0.25); }
+  .session-item__title { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 40px; display: flex; align-items: center; gap: 7px; }
+  .session-item__title .name { overflow: hidden; text-overflow: ellipsis; }
+  .session-item__meta { display: flex; align-items: center; gap: 6px; margin-top: 5px; font-size: 11.5px; color: var(--text-3); }
+  /* hover 浮现操作按钮 */
+  .session-item__actions {
+    position: absolute; right: 8px; top: 10px;
+    display: none; gap: 3px;
+  }
+  .session-item:hover .session-item__actions { display: flex; }
+  .session-item__actions button {
+    width: 22px; height: 22px; border-radius: 5px;
+    border: 1px solid var(--border); background: var(--panel);
+    color: var(--text-3); cursor: pointer; font-size: 11px;
+    display: grid; place-items: center; padding: 0;
+  }
+  .session-item__actions button:hover { color: var(--accent); border-color: var(--accent); }
+  .session-item__actions button.danger:hover { color: var(--danger); border-color: var(--danger); }
+  /* 执行中状态点 */
+  .run-dot {
+    width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+    background: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-soft);
+    animation: pulse 1.2s ease infinite;
+  }
+  .badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 11px; font-weight: 600; border-radius: 4px; padding: 1.5px 7px;
+    white-space: nowrap;
+  }
+  .badge--ok { background: var(--success-soft); color: var(--success); }
+  .badge--warn { background: var(--warning-soft); color: var(--warning); }
+  .badge--error { background: var(--danger-soft); color: var(--danger); }
+  .badge--accent { background: var(--accent-soft); color: var(--accent); }
+  .badge--plain { background: var(--panel-2); color: var(--text-3); border: 1px solid var(--border); }
+  .badge--purple { background: var(--purple-soft); color: var(--purple); }
+  .badge--info { background: var(--info-soft); color: var(--info); }
+
+  /* ============ 中间对话区 ============ */
+  .chat-col { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .chat-col__topbar {
+    height: 50px; flex-shrink: 0;
+    display: flex; align-items: center; gap: 10px;
+    padding: 0 20px;
+    border-bottom: 1px solid var(--border);
+    background: var(--panel);
+  }
+  .chat-col__title { font-weight: 700; font-size: 14.5px; }
+  .chat-col__topbar .spacer { flex: 1; }
+  .proto-tag {
+    font-size: 11px; font-weight: 600;
+    background: var(--purple-soft); color: var(--purple);
+    border-radius: 4px; padding: 2px 8px;
+  }
+  .chat-scroll { flex: 1; overflow-y: auto; padding: 22px 26px; }
+
+  .msg-user {
+    margin-left: auto; max-width: 72%;
+    background: var(--accent-soft);
+    border: 1px solid rgba(37, 99, 235, 0.22);
+    border-radius: 12px 12px 3px 12px;
+    padding: 11px 15px;
+    font-size: 13.5px;
+    line-height: 1.65;
+    width: fit-content;
+  }
+  .msg-user__time { font-size: 11px; color: var(--text-3); margin-top: 5px; text-align: right; }
+
+  .agent-block { margin-top: 18px; max-width: 88%; }
+  .agent-block__head {
+    display: flex; align-items: center; gap: 9px; margin-bottom: 10px;
+  }
+  .agent-avatar {
+    width: 26px; height: 26px; border-radius: 7px;
+    background: linear-gradient(135deg, #2563eb, #7c3aed);
+    color: #fff; font-size: 12px; font-weight: 700;
+    display: grid; place-items: center; flex-shrink: 0;
+  }
+  .agent-block__name { font-weight: 600; font-size: 13.5px; }
+  .agent-block__time { font-size: 11.5px; color: var(--text-3); }
+  .agent-block__head .spacer { flex: 1; }
+
+  /* 进度条 “第 N 步 · 执行中” */
+  .progress-line { display: flex; align-items: center; gap: 10px; margin: 4px 0 14px 35px; }
+  .progress-track { flex: 1; height: 3px; border-radius: 2px; background: var(--border); position: relative; overflow: hidden; }
+  .progress-fill { position: absolute; left: 0; top: 0; bottom: 0; width: 62%; border-radius: 2px;
+    background: linear-gradient(90deg, #2563eb, #7c3aed); }
+  .progress-fill::after {
+    content: ""; position: absolute; inset: 0;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.55), transparent);
+    animation: shine 1.6s linear infinite;
+  }
+  @keyframes shine { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
+  .progress-label { font-size: 12px; color: var(--accent); font-weight: 600; display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+  .pulse-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); animation: pulse 1.2s ease infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1; transform: scale(1);} 50% { opacity: 0.4; transform: scale(0.8);} }
+
+  /* 思考过程 */
+  .think-card {
+    margin-left: 35px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--panel-2);
+    margin-bottom: 12px;
+    overflow: hidden;
+  }
+  .think-card__row {
+    display: flex; align-items: center; gap: 8px;
+    padding: 9px 14px; cursor: pointer;
+  }
+  .think-card__label { font-weight: 600; font-size: 13px; display: flex; align-items: center; gap: 7px; }
+  .think-card__label .ico { color: var(--purple); display: grid; place-items: center; }
+  .think-card__hint { font-size: 12px; color: var(--text-3); margin-left: auto; }
+  .think-card__body { display: none; padding: 0 14px 12px; }
+  .think-card.open .think-card__body { display: block; }
+  .think-card__text {
+    font-size: 12.5px; color: var(--text-2); line-height: 1.8;
+    border-left: 2px solid var(--purple-soft);
+    padding-left: 12px;
+  }
+  .caret { font-size: 10px; color: var(--text-3); }
+
+  /* 工具卡 */
+  .toolcard {
+    margin-left: 35px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--panel);
+    box-shadow: var(--shadow);
+    margin-bottom: 12px;
+    overflow: hidden;
+  }
+  .toolcard__row { display: flex; align-items: center; gap: 10px; padding: 11px 14px; cursor: pointer; min-width: 0; }
+  .toolcard__row:hover { background: var(--panel-2); }
+  .toolcard__status { width: 17px; height: 17px; flex-shrink: 0; display: grid; place-items: center; }
+  .toolcard__kind { font-size: 11px; color: var(--text-3); flex-shrink: 0; }
+  .toolcard__name {
+    font-family: var(--mono); font-size: 13px; font-weight: 600;
+    flex: 1; min-width: 0;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .toolcard__name .args { color: var(--text-3); font-weight: 400; }
+  .toolcard__meta { margin-left: auto; display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-3); flex-shrink: 0; }
+  .toolcard__body { display: none; border-top: 1px solid var(--border); }
+  .toolcard.open .toolcard__body { display: block; }
+  .toolcard__section { padding: 10px 14px; }
+  .toolcard__section + .toolcard__section { border-top: 1px dashed var(--border); }
+  .toolcard__section-label { font-size: 11px; color: var(--text-3); margin-bottom: 6px; letter-spacing: 0.4px; display: flex; align-items: center; gap: 8px; }
+  pre.code {
+    font-family: var(--mono); font-size: 12px;
+    background: #0f172a; color: #cbd5e1;
+    border-radius: var(--radius-sm);
+    padding: 11px 13px;
+    overflow-x: auto; line-height: 1.65;
+  }
+  pre.code .k { color: #7dd3fc; }
+  pre.code .s { color: #86efac; }
+  pre.code .n { color: #fca5a5; }
+  pre.code .c { color: #64748b; }
+
+  /* 工具组：连续同类只读调用自动合并 */
+  .toolgroup {
+    margin-left: 35px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--panel);
+    box-shadow: var(--shadow);
+    margin-bottom: 12px;
+    overflow: hidden;
+  }
+  .toolgroup__head { display: flex; align-items: center; gap: 10px; padding: 11px 14px; cursor: pointer; }
+  .toolgroup__head:hover { background: var(--panel-2); }
+  .toolgroup__title { flex: 1; min-width: 0; font-size: 12.5px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .toolgroup__title b { color: var(--text-1); }
+  .toolgroup__body { display: none; border-top: 1px solid var(--border); }
+  .toolgroup.open .toolgroup__body { display: block; }
+  .toolgroup .toolcard { margin: 0; border: none; border-radius: 0; box-shadow: none; }
+  .toolgroup .toolcard + .toolcard { border-top: 1px dashed var(--border); }
+
+  /* 证据 chips */
+  .evidence-row { margin-left: 35px; display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+  .evidence-chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 12px; color: var(--text-2);
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 999px; padding: 4px 12px;
+    cursor: default;
+  }
+  .evidence-chip b { color: var(--accent); font-weight: 600; }
+
+  /* 审批卡 */
+  .approval {
+    margin-left: 35px;
+    border: 1px solid #f59e0b;
+    border-radius: var(--radius);
+    background: var(--panel);
+    box-shadow: 0 0 0 3px var(--warning-soft);
+    margin-bottom: 12px;
+    overflow: hidden;
+  }
+  .approval__header {
+    display: flex; align-items: center; gap: 10px;
+    padding: 12px 16px;
+    background: var(--warning-soft);
+    border-bottom: 1px solid rgba(245, 158, 11, 0.35);
+  }
+  .approval__title { font-weight: 700; font-size: 13.5px; color: #92400e; }
+  .approval__timer { margin-left: auto; font-size: 12px; color: #92400e; font-variant-numeric: tabular-nums; }
+  .approval__body { padding: 13px 16px; }
+  .approval__reason { font-size: 12.5px; color: var(--text-2); margin-bottom: 10px; }
+  .approval__tool { font-family: var(--mono); font-size: 12.5px; background: var(--panel-2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 11px; margin-bottom: 10px; }
+  .approval__callid { font-family: var(--mono); font-size: 11px; color: var(--text-3); text-align: right; padding: 0 16px 10px; }
+  .approval__actions { display: flex; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--border); align-items: center; }
+  .approval__actions .spacer { flex: 1; }
+  .approval__hint { font-size: 11.5px; color: var(--text-3); }
+
+  .btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    border: 1px solid var(--border-strong);
+    background: var(--panel); color: var(--text-1);
+    border-radius: var(--radius-sm); padding: 6px 14px;
+    font-size: 13px; cursor: pointer; font-family: inherit;
+  }
+  .btn:hover { border-color: var(--accent); color: var(--accent); }
+  .btn--danger:hover { border-color: var(--danger); color: var(--danger); }
+  .btn--primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn--primary:hover { background: #1d4fd8; color: #fff; }
+  .btn--success { background: var(--success); border-color: var(--success); color: #fff; }
+  .btn--success:hover { background: #12833b; color: #fff; }
+
+  /* 结论卡 */
+  .conclusion {
+    margin-left: 35px;
+    border: 1px solid rgba(37, 99, 235, 0.3);
+    border-radius: var(--radius);
+    background: linear-gradient(180deg, rgba(37, 99, 235, 0.035), var(--panel));
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+  .conclusion__header { display: flex; align-items: center; gap: 10px; padding: 13px 18px; border-bottom: 1px solid var(--border); }
+  .conclusion__title { font-weight: 700; font-size: 14px; }
+  .conclusion__body { padding: 14px 18px; }
+  .conclusion__row { display: flex; gap: 10px; margin-bottom: 11px; font-size: 13px; line-height: 1.7; }
+  .conclusion__row b { flex-shrink: 0; color: var(--text-3); font-weight: 500; }
+  .confidence { display: inline-flex; align-items: center; gap: 6px; }
+  .confidence-bar { width: 90px; height: 5px; border-radius: 3px; background: var(--border); overflow: hidden; }
+  .confidence-fill { height: 100%; width: 92%; background: linear-gradient(90deg, #16a34a, #4ade80); }
+
+  /* ============ 右侧执行跟踪 ============ */
+  .track-col {
+    width: 328px; flex-shrink: 0;
+    background: var(--panel);
+    border-left: 1px solid var(--border);
+    display: flex; flex-direction: column;
+    transition: width 0.18s ease, border-color 0.18s;
+    overflow: hidden;
+  }
+  .track-col.collapsed { width: 0; border-left-color: transparent; }
+  .track-col__tabs {
+    display: flex; gap: 2px; padding: 8px 10px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .track-tab {
+    padding: 8px 12px 10px; font-size: 13px; color: var(--text-3);
+    cursor: pointer; border-bottom: 2px solid transparent;
+  }
+  .track-tab.active { color: var(--accent); font-weight: 600; border-bottom-color: var(--accent); }
+  .track-body { flex: 1; overflow-y: auto; padding: 16px 16px 24px; }
+  .track-steps { margin-bottom: 18px; }
+  .track-step { display: flex; gap: 11px; position: relative; padding-bottom: 18px; }
+  .track-step::before {
+    content: ""; position: absolute; left: 10px; top: 22px; bottom: 0;
+    width: 2px; background: var(--border);
+  }
+  .track-step:last-child::before { display: none; }
+  .track-step__dot {
+    width: 21px; height: 21px; border-radius: 50%;
+    display: grid; place-items: center;
+    font-size: 11px; font-weight: 700; flex-shrink: 0;
+    background: var(--panel-2); color: var(--text-3);
+    border: 2px solid var(--border);
+    z-index: 1;
+  }
+  .track-step.done .track-step__dot { background: var(--success-soft); border-color: var(--success); color: var(--success); }
+  .track-step.running .track-step__dot { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+  .track-step__label { font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+  .track-step__sub { font-size: 12px; color: var(--text-3); margin-top: 4px; line-height: 1.6; }
+  .track-step__tools { margin-top: 8px; display: flex; flex-direction: column; gap: 5px; }
+  .track-tool {
+    display: flex; align-items: center; gap: 7px;
+    font-family: var(--mono); font-size: 11.5px; color: var(--text-2);
+    background: var(--panel-2); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); padding: 5px 9px;
+  }
+  .track-tool .t { color: var(--text-3); margin-left: auto; font-size: 10.5px; }
+
+  .live-think {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--panel-2);
+    padding: 12px 14px;
+    margin-bottom: 14px;
+  }
+  .live-think__head { display: flex; align-items: center; gap: 7px; font-size: 12.5px; font-weight: 600; margin-bottom: 8px; }
+  .live-think__text { font-size: 12px; color: var(--text-2); line-height: 1.8; }
+  .live-think__text .cursor {
+    display: inline-block; width: 7px; height: 13px;
+    background: var(--accent); vertical-align: -2px;
+    animation: blink 1s steps(1) infinite;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  /* ============ 底部输入条 ============ */
+  .composer {
+    flex-shrink: 0;
+    border-top: 1px solid var(--border);
+    background: var(--panel);
+    padding: 12px 20px 14px;
+  }
+  .composer__input-row {
+    display: flex; align-items: center; gap: 10px;
+    border: 1px solid var(--border-strong);
+    border-radius: 12px;
+    padding: 10px 14px;
+    background: var(--panel-2);
+  }
+  .composer__input-row:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .composer__input { flex: 1; border: none; outline: none; background: transparent; font-size: 13.5px; font-family: inherit; color: var(--text-1); }
+  .composer__input::placeholder { color: var(--text-3); }
+  .stop-btn {
+    width: 32px; height: 32px; border-radius: 9px;
+    background: var(--danger); border: none;
+    display: grid; place-items: center; cursor: pointer;
+    box-shadow: 0 0 0 3px var(--danger-soft);
+  }
+  .stop-btn:hover { background: #b91c1c; }
+  .composer__opts {
+    display: flex; align-items: center; gap: 8px; margin-top: 9px;
+    overflow-x: auto; scrollbar-width: none;
+  }
+  .composer__opts::-webkit-scrollbar { display: none; }
+  .opt-select {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 12px; color: var(--text-2);
+    border: 1px solid var(--border);
+    border-radius: 999px; padding: 3.5px 11px;
+    cursor: pointer; background: var(--panel);
+    white-space: nowrap; flex-shrink: 0;
+  }
+  .opt-select:hover { border-color: var(--accent); color: var(--accent); }
+  .opt-select .dot2 { width: 6px; height: 6px; border-radius: 50%; }
+  .composer__opts .spacer { flex: 1; }
+  .composer__hint { font-size: 11.5px; color: var(--text-3); white-space: nowrap; flex-shrink: 0; }
+
+  /* 原型注释 */
+  .proto-note {
+    margin: 20px 0 8px 35px;
+    padding: 12px 16px;
+    border: 1px dashed var(--border-strong);
+    border-radius: var(--radius);
+    background: var(--panel-2);
+    font-size: 12px; color: var(--text-3); line-height: 1.8;
+    max-width: 88%;
+  }
+  .proto-note b { color: var(--text-2); }
+  code { font-family: var(--mono); background: var(--panel); border: 1px solid var(--border); border-radius: 4px; padding: 0 5px; font-size: 11.5px; }
+</style>
+</head>
+<body>
+
+<!-- ============ 导航 ============ -->
+<aside class="sidenav">
+  <div class="sidenav__brand">
+    <div class="sidenav__logo">IP</div>
+    <div class="sidenav__brand-name">InfraPilot<small>AI SRE AGENT</small></div>
+  </div>
+  <div class="sidenav__group-label">工作台</div>
+  <div class="sidenav__item">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
+    告警中心
+  </div>
+  <div class="sidenav__item active">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+    诊断会话
+  </div>
+  <div class="sidenav__item">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></svg>
+    数据源
+  </div>
+  <div class="sidenav__group-label">资源</div>
+  <div class="sidenav__item">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+    知识库
+  </div>
+  <div class="sidenav__item">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="6" r="2.5"/><circle cx="19" cy="6" r="2.5"/><circle cx="12" cy="18" r="2.5"/><path d="M7 7.5 10.5 16M17 7.5 13.5 16M7.5 6h9"/></svg>
+    服务拓扑
+  </div>
+  <div class="sidenav__item">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/></svg>
+    系统设置
+  </div>
+</aside>
+
+<!-- ============ 会话列表 ============ -->
+<aside class="session-col" id="sessionCol">
+  <div class="session-col__header">
+    <div class="session-col__title">诊断会话</div>
+    <button class="btn-new" title="新建会话">＋</button>
+    <button class="btn-collapse" title="折叠会话列表" onclick="document.getElementById('sessionCol').classList.add('collapsed')">«</button>
+  </div>
+  <div class="session-col__search"><input placeholder="搜索会话 / 对象 / 根因…" /></div>
+  <div class="session-list">
+    <div class="session-item active">
+      <div class="session-item__title"><span class="run-dot"></span><span class="name">order-api 频繁重启排查</span></div>
+      <div class="session-item__meta"><span class="badge badge--warn">待确认</span><span>k8s · default</span><span>16:32</span></div>
+      <div class="session-item__actions">
+        <button title="重命名">✎</button>
+        <button title="归档">📦</button>
+        <button class="danger" title="删除">🗑</button>
+      </div>
+    </div>
+    <div class="session-item">
+      <div class="session-item__title"><span class="name">ironic conductor 心跳超时</span></div>
+      <div class="session-item__meta"><span class="badge badge--ok">已修复</span><span>openstack</span><span>14:10</span></div>
+      <div class="session-item__actions">
+        <button title="重命名">✎</button>
+        <button title="归档">📦</button>
+        <button class="danger" title="删除">🗑</button>
+      </div>
+    </div>
+    <div class="session-item">
+      <div class="session-item__title"><span class="name">neutron agent RPC 重试告警</span></div>
+      <div class="session-item__meta"><span class="badge badge--ok">已归档</span><span>openstack</span><span>昨天</span></div>
+      <div class="session-item__actions">
+        <button title="重命名">✎</button>
+        <button title="归档">📦</button>
+        <button class="danger" title="删除">🗑</button>
+      </div>
+    </div>
+    <div class="session-item">
+      <div class="session-item__title"><span class="name">节点磁盘水位 92% 处理</span></div>
+      <div class="session-item__meta"><span class="badge badge--error">已拒绝</span><span>linux · node-02</span><span>昨天</span></div>
+      <div class="session-item__actions">
+        <button title="重命名">✎</button>
+        <button title="归档">📦</button>
+        <button class="danger" title="删除">🗑</button>
+      </div>
+    </div>
+    <div class="session-item">
+      <div class="session-item__title"><span class="name">ELK 索引写入延迟上升</span></div>
+      <div class="session-item__meta"><span class="badge badge--ok">已修复</span><span>elk</span><span>09-26</span></div>
+      <div class="session-item__actions">
+        <button title="重命名">✎</button>
+        <button title="归档">📦</button>
+        <button class="danger" title="删除">🗑</button>
+      </div>
+    </div>
+  </div>
+</aside>
+
+<!-- ============ 对话区 ============ -->
+<main class="chat-col">
+  <div class="chat-col__topbar">
+    <button class="btn-collapse" title="展开/折叠会话列表" onclick="document.getElementById('sessionCol').classList.toggle('collapsed')" style="margin-left:-6px">☰</button>
+    <div class="chat-col__title">order-api 频繁重启排查</div>
+    <span class="badge badge--warn">待确认</span>
+    <span class="badge badge--plain">k8s / default / order-api</span>
+    <div class="spacer"></div>
+    <button class="btn-collapse" id="trackToggle" title="展开/折叠执行跟踪" onclick="toggleTrack()">跟踪 ▸</button>
+    <span class="proto-tag">设计原型</span>
+  </div>
+
+  <div class="chat-scroll">
+
+    <!-- 用户消息 -->
+    <div class="msg-user">
+      生产环境 order-api 从 15 点开始一直重启，Pod 状态 CrashLoopBackOff，帮我看下根因，确认后修复。
+      <div class="msg-user__time">16:30</div>
+    </div>
+
+    <!-- Agent 输出块 -->
+    <div class="agent-block">
+      <div class="agent-block__head">
+        <div class="agent-avatar">IP</div>
+        <div>
+          <div class="agent-block__name">InfraPilot Agent</div>
+          <div class="agent-block__time">16:30 · 已运行 2 分 12 秒</div>
+        </div>
+        <div class="spacer"></div>
+      </div>
+
+      <!-- 进度线 -->
+      <div class="progress-line">
+        <span class="progress-label"><span class="pulse-dot"></span>第 3 步 · 修复执行中</span>
+        <div class="progress-track"><div class="progress-fill"></div></div>
+      </div>
+
+      <!-- 思考过程 -->
+      <div class="think-card open">
+        <div class="think-card__row" onclick="this.parentElement.classList.toggle('open')">
+          <span class="think-card__label">
+            <span class="ico"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0-9 9 5 5 0 0 0 2 8h1a2 2 0 0 0 4 0 2 2 0 0 1 4 0 2 2 0 0 0 4 0h1a5 5 0 0 0 2-8 6 6 0 0 0-9-9z"/></svg></span>
+            思考过程
+          </span>
+          <span class="think-card__hint">点击收起 <span class="caret">▾</span></span>
+        </div>
+        <div class="think-card__body">
+          <div class="think-card__text">
+            用户反馈 order-api 处于 CrashLoopBackOff。诊断路径：① 先确认 Pod 当前状态与重启次数、退出码 → ② 拉取该 Pod 最近 ERROR/WARN 日志定位崩溃前的报错 → ③ 查询内存指标确认是否 OOMKilled → ④ 结合知识库相似案例给出根因与修复方案，变更类操作需经审批网关执行。
+          </div>
+        </div>
+      </div>
+
+      <!-- 工具卡 1：k8s -->
+      <div class="toolcard open" onclick="event.stopPropagation(); this.classList.toggle('open')">
+        <div class="toolcard__row">
+          <span class="toolcard__status">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+          </span>
+          <span class="toolcard__kind">技能调用</span>
+          <span class="toolcard__name">k8s.get_pod_status<span class="args">(name="order-api-7f9d8b6c-x2kq", namespace="default")</span></span>
+          <span class="toolcard__meta"><span class="badge badge--plain">readonly</span> 240ms <span class="caret">▾</span></span>
+        </div>
+        <div class="toolcard__body" onclick="event.stopPropagation()">
+          <div class="toolcard__section">
+            <div class="toolcard__section-label">返回结果</div>
+            <pre class="code">{
+  <span class="k">"phase"</span>: <span class="s">"Running"</span>, <span class="k">"restarts"</span>: <span class="n">6</span>,
+  <span class="k">"lastState"</span>: { <span class="k">"terminated"</span>: { <span class="k">"reason"</span>: <span class="s">"OOMKilled"</span>, <span class="k">"exitCode"</span>: <span class="n">137</span> } },
+  <span class="k">"ready"</span>: <span class="n">0/1</span>, <span class="k">"memoryLimit"</span>: <span class="s">"200Mi"</span>
+}</pre>
+          </div>
+        </div>
+      </div>
+
+      <!-- 工具组：连续同类只读调用自动合并（elk + prom） -->
+      <div class="toolgroup open" id="toolGroup">
+        <div class="toolgroup__head" onclick="document.getElementById('toolGroup').classList.toggle('open')">
+          <span class="toolcard__status">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+          </span>
+          <span class="toolcard__kind">批量采集</span>
+          <span class="toolgroup__title">连续 <b>2</b> 次只读调用已合并 — elk.search_logs · prom.range_query</span>
+          <span class="toolcard__meta"><span class="badge badge--plain">readonly</span> 690ms <span class="caret">▾</span></span>
+        </div>
+        <div class="toolgroup__body">
+          <div class="toolcard open" onclick="event.stopPropagation(); this.classList.toggle('open')">
+            <div class="toolcard__row">
+              <span class="toolcard__status">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+              </span>
+              <span class="toolcard__kind">技能调用</span>
+              <span class="toolcard__name">elk.search_logs<span class="args">(pod="order-api-*", level="ERROR", window="30m")</span></span>
+              <span class="toolcard__meta"><span class="badge badge--plain">readonly</span> 512ms <span class="caret">▸</span></span>
+            </div>
+            <div class="toolcard__body">
+              <div class="toolcard__section">
+                <div class="toolcard__section-label">结果 · 命中 43 条 · trust_level=untrusted_data</div>
+                <pre class="code"><span class="c">[16:14:12] kubelet  OOMKilled: order-api (exit 137), restart count 6
+[16:13:58] order-api heap usage 91% (200Mi limit), GC pause 480ms
+[16:13:40] order-api OutOfMemoryError: unable to create native thread
+…</span></pre>
+              </div>
+            </div>
+          </div>
+
+          <div class="toolcard" onclick="event.stopPropagation(); this.classList.toggle('open')">
+            <div class="toolcard__row">
+              <span class="toolcard__status">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+              </span>
+              <span class="toolcard__kind">技能调用</span>
+              <span class="toolcard__name">prom.range_query<span class="args">(query="container_memory_working_set_bytes{pod=~\"order-api.*\"}", range="1h")</span></span>
+              <span class="toolcard__meta"><span class="badge badge--plain">readonly</span> 178ms <span class="caret">▸</span></span>
+            </div>
+            <div class="toolcard__body">
+              <div class="toolcard__section">
+                <div class="toolcard__section-label">结果 · 内存 15:00 起线性增长，18 分钟后触顶 200Mi</div>
+                <pre class="code">{ <span class="k">"pod"</span>: <span class="s">"order-api-7f9d8b6c-x2kq"</span>, <span class="k">"start"</span>: <span class="n">"38Mi"</span>, <span class="k">"peak"</span>: <span class="n">"200Mi"</span>, <span class="k">"trend"</span>: <span class="s">"linear_rising"</span> }</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 证据沉淀 -->
+      <div class="evidence-row">
+        <span class="evidence-chip">📎 证据 <b>3</b> 条已沉淀</span>
+        <span class="evidence-chip">OOMKilled · exit 137</span>
+        <span class="evidence-chip">heap 91% 线性增长</span>
+        <span class="evidence-chip">知识库相似案例 <b>92%</b></span>
+      </div>
+
+      <!-- 审批卡 -->
+      <div class="approval">
+        <div class="approval__header">
+          <span style="font-size:15px">🔒</span>
+          <span class="approval__title">需要人工确认 — 变更类操作待审批</span>
+          <span class="approval__timer">已等待 8 秒</span>
+        </div>
+        <div class="approval__body">
+          <div class="approval__reason">该操作将修改线上工作负载资源配额，属于 medium 风险等级，需审批后经 Command Gateway 执行（argsHash 防篡改校验）。</div>
+          <div class="approval__tool">k8s.patch_resource_limits(kind="Deployment", name="order-api", container="order-api", limits={memory:"200Mi" → "512Mi"})</div>
+          <pre class="code"><span class="c">// 变更预览</span>
+  resources:
+    limits:
+<span class="n">-     memory: 200Mi</span>
+<span class="s">+     memory: 512Mi</span></pre>
+        </div>
+        <div class="approval__callid">call_id: a1f3e78c-9b42-4d1f-8e6a-7bd5f4e427</div>
+        <div class="approval__actions">
+          <span class="approval__hint">批准后自动执行并回读验证</span>
+          <div class="spacer"></div>
+          <button class="btn btn--danger">拒 绝</button>
+          <button class="btn btn--primary">允许一次</button>
+          <button class="btn btn--success">始终允许</button>
+        </div>
+      </div>
+
+      <!-- 结论卡（示例：审批完成后的终态预览） -->
+      <div class="conclusion">
+        <div class="conclusion__header">
+          <span class="conclusion__title">根因结论</span>
+          <span class="badge badge--accent">置信度 92%</span>
+          <span class="badge badge--ok">已修复 · 待观察</span>
+        </div>
+        <div class="conclusion__body">
+          <div class="conclusion__row"><b>根因</b><span>order-api 会话缓存无淘汰策略，堆内存自 15:00 起线性增长，约 18 分钟触及 200Mi limit 被 OOMKilled（exit 137），kubelet 反复拉起形成 CrashLoopBackOff。</span></div>
+          <div class="conclusion__row"><b>证据</b><span>k8s.get_pod_status（重启 6 次 / OOMKilled）· elk.search_logs（heap 91% / GC 480ms）· prom.range_query（内存线性上升曲线）· 知识库案例 #42（相似度 92%）</span></div>
+          <div class="conclusion__row"><b>处置</b><span>短期：memory limit 200Mi → 512Mi（已审批执行，Pod 已 Ready）。长期：修复缓存淘汰逻辑并接入 pprof 持续观测。</span></div>
+          <div class="conclusion__row"><b>建议</b><span>为 Deployment 增加内存告警规则（>85% 持续 5m），复用现有 Prometheus 数据源一键创建。</span></div>
+          <div class="confidence" style="margin-left:52px">
+            <span style="font-size:12px;color:var(--text-3)">诊断置信度</span>
+            <span class="confidence-bar"><span class="confidence-fill"></span></span>
+            <span style="font-family:var(--mono);font-size:12px;font-weight:700;color:var(--success)">92%</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="proto-note">
+        <b>原型说明：</b>中央对话流的每个元素都对应现有后端事件：<code>assistant_delta</code> → 思考过程流式文本；<code>tool_call_start/result</code>（按 toolCallId 合并）→ 技能调用卡，<b>连续同类只读调用自动合并为「批量采集」组</b>；<code>evidence_added</code> → 证据 chips；<code>approval_request</code> → 审批卡（call_id / 变更预览 / 拒绝 / 允许一次 / <b>始终允许</b>）；<code>plan_update</code> → 右侧执行跟踪步骤；<code>conclusion</code> → 根因结论卡。会话列表：hover 浮现重命名/归档/删除，执行中的会话带脉冲状态点。其中「始终允许」需要在 Policy Engine 新增会话级白名单（readonly 之外按 skill+tool 放行）。
+      </div>
+    </div>
+  </div>
+
+  <!-- 底部输入条 -->
+  <div class="composer">
+    <div class="composer__input-row">
+      <input class="composer__input" placeholder="任务执行中，输入内容可实时引导智能体（回车追加，如：先看下 15 点前的变更记录）…" />
+      <button class="stop-btn" title="停止执行">
+        <svg width="12" height="12" viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="2" fill="#fff"/></svg>
+      </button>
+    </div>
+    <div class="composer__opts">
+      <span class="opt-select"><span class="dot2" style="background:var(--warning)"></span>审批 · 需确认 ▾</span>
+      <span class="opt-select"><span class="dot2" style="background:var(--success)"></span>只读 · 自动 ▾</span>
+      <span class="opt-select">deepseek-v4-flash ▾</span>
+      <div class="spacer"></div>
+      <span class="composer__hint">Enter 发送 · Shift+Enter 换行</span>
+    </div>
+  </div>
+</main>
+
+<!-- ============ 右侧执行跟踪 ============ -->
+<aside class="track-col" id="trackCol">
+  <div class="track-col__tabs">
+    <div class="track-tab active">执行跟踪</div>
+    <div class="track-tab">证据 <span style="font-size:11px">(3)</span></div>
+    <div class="track-tab">审计</div>
+  </div>
+  <div class="track-body">
+
+    <!-- 步骤时间线 -->
+    <div class="track-steps">
+      <div class="track-step done">
+        <div class="track-step__dot">✓</div>
+        <div>
+          <div class="track-step__label">第 1 步 · 现象确认</div>
+          <div class="track-step__sub">确认 Pod 运行状态、重启次数与退出码</div>
+          <div class="track-step__tools">
+            <div class="track-tool">✓ k8s.get_pod_status <span class="t">240ms</span></div>
+            <div class="track-tool">✓ k8s.get_events <span class="t">118ms</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="track-step done">
+        <div class="track-step__dot">✓</div>
+        <div>
+          <div class="track-step__label">第 2 步 · 证据采集</div>
+          <div class="track-step__sub">日志报错模式 + 内存指标曲线交叉验证</div>
+          <div class="track-step__tools">
+            <div class="track-tool">✓ elk.search_logs <span class="t">512ms</span></div>
+            <div class="track-tool">✓ prom.range_query <span class="t">178ms</span></div>
+            <div class="track-tool">✓ knowledge.search_similar_cases <span class="t">65ms</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="track-step running">
+        <div class="track-step__dot">3</div>
+        <div>
+          <div class="track-step__label">第 3 步 · 修复执行</div>
+          <div class="track-step__sub">等待审批 → 修改内存 limit → 回读验证恢复</div>
+          <div class="track-step__tools">
+            <div class="track-tool">🔒 k8s.patch_resource_limits <span class="t">待审批</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="track-step">
+        <div class="track-step__dot">4</div>
+        <div>
+          <div class="track-step__label">第 4 步 · 验证与归档</div>
+          <div class="track-step__sub">确认 Pod Ready、沉淀诊断结论至知识库</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 实时思考流 -->
+    <div class="live-think">
+      <div class="live-think__head">
+        <span class="pulse-dot"></span> 思考中（实时流）
+      </div>
+      <div class="live-think__text">
+        审批卡已推送 8 秒，用户尚未决策。当前证据链完整：OOMKilled exit 137 + heap 线性增长 + 知识库案例 92% 相似，可以给出高置信度结论；若用户批准，立即 patch limits 并在 30 秒后回读 Pod 状态验证恢复…<span class="cursor"></span>
+      </div>
+    </div>
+
+    <!-- 会话信息 -->
+    <div style="border-top:1px solid var(--border);padding-top:12px;font-size:12px;color:var(--text-3);line-height:2">
+      <div>对象：<span style="color:var(--text-2)">order-api-7f9d8b6c-x2kq</span></div>
+      <div>技能：<span style="color:var(--text-2)">k8s / elk / prom / knowledge</span></div>
+      <div>工具调用：<span style="color:var(--text-2)">5 次（4 只读 · 1 待审批）</span></div>
+      <div>风险等级：<span style="color:var(--warning)">medium × 1</span></div>
+    </div>
+  </div>
+</aside>
+
+<script>
+  // 右侧跟踪面板折叠（同步按钮箭头方向）
+  function toggleTrack() {
+    const col = document.getElementById('trackCol');
+    col.classList.toggle('collapsed');
+    document.getElementById('trackToggle').textContent = col.classList.contains('collapsed') ? '跟踪 ◂' : '跟踪 ▸';
+  }
+
+  // 右侧 Tab 切换（原型仅样式演示）
+  document.querySelectorAll('.track-tab').forEach(function (t) {
+    t.addEventListener('click', function () {
+      document.querySelectorAll('.track-tab').forEach(function (x) { x.classList.remove('active'); });
+      t.classList.add('active');
+    });
+  });
+
+  // 底部选项 pill 点击轮换（演示审批模式/只读策略切换）
+  const OPT_CYCLES = [
+    [
+      ['审批 · 需确认', 'var(--warning)'],
+      ['审批 · 允许一次后询问', 'var(--accent)'],
+      ['审批 · 本会话全自动', 'var(--success)'],
+    ],
+    [
+      ['只读 · 自动', 'var(--success)'],
+      ['只读 · 手动', 'var(--text-3)'],
+    ],
+  ];
+  document.querySelectorAll('.composer__opts .opt-select').forEach(function (pill, idx) {
+    const cycle = OPT_CYCLES[idx];
+    if (!cycle) return;
+    pill.addEventListener('click', function () {
+      const cur = pill.dataset.label || cycle[0][0];
+      const next = cycle[(cycle.findIndex((c) => c[0] === cur) + 1) % cycle.length];
+      pill.dataset.label = next[0];
+      pill.innerHTML = '<span class="dot2" style="background:' + next[1] + '"></span>' + next[0] + ' ▾';
+    });
+  });
+</script>
+</body>
+</html>

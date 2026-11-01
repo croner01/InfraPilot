@@ -1,29 +1,8 @@
 import { useState } from 'react'
 import type { AgentSession } from '../../lib/types.js'
 import { formatTime } from '../../lib/format.js'
+import { RUNNING_SESSION_STATUSES, sessionStatusClass as statusClass, sessionStatusText as statusText } from '../../lib/session-status.js'
 import './session-list.css'
-
-const statusText: Record<string, string> = {
-  intake: '接收中',
-  planning: '分析规划',
-  executing: '执行中',
-  awaiting_approval: '等待审批',
-  reflecting: '反思中',
-  concluded: '已得出结论',
-  remediating: '修复中',
-  closed: '已关闭',
-}
-
-const statusClass: Record<string, string> = {
-  intake: 'status--intake',
-  planning: 'status--planning',
-  executing: 'status--executing',
-  awaiting_approval: 'status--warning',
-  reflecting: 'status--planning',
-  concluded: 'status--success',
-  remediating: 'status--executing',
-  closed: 'status--closed',
-}
 
 interface SessionListProps {
   activeSessions: AgentSession[]
@@ -98,6 +77,15 @@ function SessionListItem({
 }) {
   const [editing, setEditing] = useState(false)
   const [title, setTitle] = useState(session.title)
+  // 对齐原型 meta 行的「资源域」：优先用本轮激活技能，其次用已调用工具的 skill
+  const scope = Array.from(
+    new Set([
+      ...(session.activeSkills ?? []),
+      ...session.executedToolCalls.map((call) => call.skill).filter(Boolean),
+    ]),
+  )
+    .slice(0, 2)
+    .join(' · ')
 
   const save = () => {
     setEditing(false)
@@ -128,26 +116,40 @@ function SessionListItem({
             onDoubleClick={() => setEditing(true)}
             title="双击编辑标题"
           >
+            {RUNNING_SESSION_STATUSES.has(session.status) && <span className="ui-session-item__run-dot" />}
             {session.title}
           </span>
         )}
-        <button
-          type="button"
-          className="ui-session-item__close"
-          title="删除会话"
-          onClick={(e) => {
-            e.stopPropagation()
-            onDelete()
-          }}
-        >
-          ✕
-        </button>
+        <span className="ui-session-item__actions">
+          <button
+            type="button"
+            className="ui-session-item__action"
+            title="重命名"
+            onClick={(e) => {
+              e.stopPropagation()
+              setEditing(true)
+            }}
+          >
+            ✎
+          </button>
+          <button
+            type="button"
+            className="ui-session-item__action ui-session-item__action--danger"
+            title="删除会话"
+            onClick={(e) => {
+              e.stopPropagation()
+              onDelete()
+            }}
+          >
+            ✕
+          </button>
+        </span>
       </div>
       <div className="ui-session-item__meta">
-        <span className="ui-session-item__id">{session.id.slice(0, 8)}</span>
         <span className={`ui-status ${statusClass[session.status] ?? ''}`}>
           {statusText[session.status] ?? session.status}
         </span>
+        {scope && <span className="ui-session-item__scope" title={`会话 ${session.id}`}>{scope}</span>}
         <span className="ui-session-item__time">{formatTime(session.updatedAt)}</span>
       </div>
     </div>

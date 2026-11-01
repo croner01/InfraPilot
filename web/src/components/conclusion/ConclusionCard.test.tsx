@@ -8,8 +8,8 @@ const rootCause: RootCause = {
   summary: 'order-api 内存 limit 256Mi 过低，触发 OOMKilled',
   confidence: 0.87,
   evidenceChain: [
-    { evidenceId: 'ev1', role: 'primary' },
-    { evidenceId: 'ev2', role: 'supporting' },
+    { evidenceId: 'ev1', role: 'primary', claim: '结论正文直接引用' },
+    { evidenceId: 'ev2', role: 'supporting', claim: '支撑: 副本被外部终止' },
   ],
   alternativeHypotheses: ['节点资源不足（已排除）'],
 }
@@ -28,6 +28,19 @@ describe('ConclusionCard', () => {
     expect(screen.getByText(/order-api 内存 limit 256Mi/)).toBeInTheDocument()
     expect(screen.getByText('置信度 87%')).toBeInTheDocument()
     expect(screen.getByText('将内存 limit 从 256Mi 调整到 512Mi')).toBeInTheDocument()
+  })
+
+  it('exposes what each cited evidence supports as a hover hint', () => {
+    render(<ConclusionCard rootCause={rootCause} remediation={null} onCitationClick={() => {}} />)
+    expect(screen.getByText(/证据#1/)).toHaveAttribute('title', '结论正文直接引用')
+    expect(screen.getByText(/证据#2/)).toHaveAttribute('title', '支撑: 副本被外部终止')
+  })
+
+  it('shows 未给出 instead of 0% when confidence is absent', () => {
+    render(<ConclusionCard rootCause={{ ...rootCause, confidence: null }} onCitationClick={() => {}} />)
+    expect(screen.getByText('置信度 未给出')).toBeInTheDocument()
+    expect(screen.queryByText('置信度 0%')).toBeNull()
+    expect(screen.queryByText('0%')).toBeNull()
   })
 
   it('renders markdown formatting in the summary', () => {

@@ -11,18 +11,68 @@
 .ui-right-panel--collapsed {
   margin-right: -356px;
 }
+
+/* 折叠后的边缘把手：固定在右侧中部，保证任何情况下都能把右栏拉回来 */
+.ui-right-panel__handle {
+  position: fixed;
+  top: 50%;
+  right: 0;
+  transform: translateY(-50%);
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 5px;
+  border: 1px solid var(--border);
+  border-right: none;
+  border-radius: var(--radius-md) 0 0 var(--radius-md);
+  background: var(--panel);
+  color: var(--text-2);
+  font-size: 12px;
+  cursor: pointer;
+  box-shadow: -2px 0 10px rgba(15, 23, 42, 0.08);
+}
+.ui-right-panel__handle:hover {
+  color: var(--text);
+  background: var(--bg);
+}
+.ui-right-panel__handle-arrow {
+  font-size: 12px;
+}
+.ui-right-panel__handle-text {
+  writing-mode: vertical-rl;
+  letter-spacing: 2px;
+}
 .ui-right-panel__head {
   height: 46px;
   flex: 0 0 46px;
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 0 10px;
+  padding: 0 6px 0 8px;
   border-bottom: 1px solid var(--border);
+}
+
+/* 右栏 Tab 收紧：6 个 Tab 需在一行内放下（执行跟踪/证据/审计/计划/修复/产物） */
+.ui-right-panel__head .ui-tabs {
+  gap: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+.ui-right-panel__head .ui-tabs__tab {
+  height: 28px;
+  padding: 0 7px;
+  font-size: 12.5px;
+  white-space: nowrap;
+  gap: 4px;
+}
+.ui-right-panel__head .ui-tabs__count {
+  font-size: 11px;
 }
 .ui-right-panel__collapse {
   margin-left: auto;
   width: 28px;
+  flex: 0 0 28px;
   height: 28px;
   border: none;
   background: transparent;

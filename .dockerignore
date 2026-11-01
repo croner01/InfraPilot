@@ -1,0 +1,18 @@
+# 仅影响「以仓库根目录为构建上下文」的镜像（如 py-server/Dockerfile）。
+.git
+.gitignore
+**/node_modules
+**/dist
+**/__pycache__
+**/.pytest_cache
+**/*.pyc
+# 运行时数据（不可进镜像）
+py-server/data
+server/data
+web/dist
+# 文档与原型
+docs
+prototypes
+.agents
+.codex
+.trae

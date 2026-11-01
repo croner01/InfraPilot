@@ -8,10 +8,16 @@ const meta: Meta<typeof RightPanel> = {
 export default meta
 type Story = StoryObj<typeof RightPanel>
 
+const note = (text: string) => <p style={{ color: 'var(--text-2)', fontSize: 12 }}>{text}</p>
+
 export const Default: Story = {
   args: {
-    process: <p style={{ color: 'var(--text-2)' }}>调查过程（M3/M7 接入）</p>,
-    evidence: <p style={{ color: 'var(--text-2)' }}>证据链（M3 接入）</p>,
-    object: <p style={{ color: 'var(--text-2)' }}>对象上下文（M5/M6 接入）</p>,
+    track: note('执行跟踪：一行执行进展 + 里程碑 + 思考记录（实时流落在 live 条目上）'),
+    evidence: note('证据链'),
+    audit: note('审计记录'),
+    plan: note('诊断计划 + 假设'),
+    remediation: note('修复方案'),
+    artifacts: note('会话产物'),
+    counts: { evidence: 3, audit: 5, plan: 4 },
   },
 }

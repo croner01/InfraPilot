@@ -1,0 +1,989 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>InfraPilot · 数据源工作台 — 设计原型</title>
+<style>
+  /* ==========================================================
+     InfraPilot 数据源工作台 — 静态设计原型（纯 HTML/CSS/JS）
+     对齐 web/src/styles/tokens.css 设计变量（浅色主题）
+     ========================================================== */
+  :root {
+    --bg: #f6f7f9;
+    --panel: #ffffff;
+    --panel-2: #fafbfc;
+    --border: #e4e7ec;
+    --border-strong: #d0d5dd;
+    --text-1: #1a2233;
+    --text-2: #4b5565;
+    --text-3: #8a93a6;
+    --accent: #2563eb;
+    --accent-soft: rgba(37, 99, 235, 0.09);
+    --success: #16a34a;
+    --success-soft: rgba(22, 163, 74, 0.1);
+    --warning: #d97706;
+    --warning-soft: rgba(217, 119, 6, 0.1);
+    --danger: #dc2626;
+    --danger-soft: rgba(220, 38, 38, 0.08);
+    --info: #0891b2;
+    --info-soft: rgba(8, 145, 178, 0.1);
+    --purple: #7c3aed;
+    --purple-soft: rgba(124, 58, 237, 0.09);
+    --radius: 10px;
+    --radius-sm: 6px;
+    --shadow: 0 1px 2px rgba(16, 24, 40, 0.05);
+    --mono: "JetBrains Mono", "Cascadia Code", Consolas, monospace;
+    --sans: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    font-family: var(--sans);
+    background: var(--bg);
+    color: var(--text-1);
+    font-size: 14px;
+    display: flex;
+    overflow: hidden;
+  }
+
+  /* ---------------- Sidebar ---------------- */
+  .sidenav {
+    width: 208px;
+    flex-shrink: 0;
+    background: var(--panel);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    padding: 14px 10px;
+  }
+  .sidenav__brand {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 4px 10px 16px;
+  }
+  .sidenav__logo {
+    width: 30px; height: 30px;
+    border-radius: 8px;
+    background: linear-gradient(135deg, #2563eb, #7c3aed);
+    display: grid; place-items: center;
+    color: #fff; font-weight: 700; font-size: 14px;
+  }
+  .sidenav__brand-name { font-weight: 700; font-size: 15px; letter-spacing: 0.2px; }
+  .sidenav__brand-name small { display: block; font-size: 10px; font-weight: 500; color: var(--text-3); letter-spacing: 1px; }
+  .sidenav__group { margin-top: 10px; }
+  .sidenav__group-label {
+    font-size: 11px; color: var(--text-3);
+    padding: 6px 12px; letter-spacing: 0.5px;
+  }
+  .sidenav__item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 12px;
+    border-radius: var(--radius-sm);
+    color: var(--text-2);
+    cursor: pointer;
+    font-size: 13.5px;
+    transition: background 0.12s;
+  }
+  .sidenav__item:hover { background: var(--panel-2); color: var(--text-1); }
+  .sidenav__item.active {
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-weight: 600;
+  }
+  .sidenav__item svg { width: 17px; height: 17px; flex-shrink: 0; }
+  .sidenav__item .count {
+    margin-left: auto;
+    font-size: 11px;
+    background: var(--danger-soft);
+    color: var(--danger);
+    border-radius: 9px;
+    padding: 1px 7px;
+    font-weight: 600;
+  }
+  .sidenav__footer {
+    margin-top: auto;
+    padding: 10px 12px;
+    border-top: 1px solid var(--border);
+    display: flex; align-items: center; gap: 9px;
+    font-size: 12.5px; color: var(--text-2);
+  }
+  .sidenav__dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--success);
+    box-shadow: 0 0 0 3px var(--success-soft);
+  }
+
+  /* ---------------- Main ---------------- */
+  .main { flex: 1; overflow-y: auto; padding: 22px 26px 40px; }
+  .topbar {
+    display: flex; align-items: center; gap: 12px;
+    margin-bottom: 18px;
+  }
+  .breadcrumb { font-size: 13px; color: var(--text-3); }
+  .breadcrumb b { color: var(--text-1); font-weight: 600; }
+  .topbar__actions { margin-left: auto; display: flex; gap: 8px; }
+
+  .btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    border: 1px solid var(--border-strong);
+    background: var(--panel);
+    color: var(--text-1);
+    border-radius: var(--radius-sm);
+    padding: 6px 13px;
+    font-size: 13px;
+    cursor: pointer;
+    font-family: inherit;
+    transition: all 0.12s;
+  }
+  .btn:hover { border-color: var(--accent); color: var(--accent); }
+  .btn--primary {
+    background: var(--accent); border-color: var(--accent); color: #fff;
+  }
+  .btn--primary:hover { background: #1d4fd8; color: #fff; }
+  .btn svg { width: 14px; height: 14px; }
+
+  /* ---------------- Page header ---------------- */
+  .page-header { margin-bottom: 16px; }
+  .page-header__title { font-size: 20px; font-weight: 700; display: flex; align-items: center; gap: 10px; }
+  .page-header__subtitle { color: var(--text-3); font-size: 13px; margin-top: 4px; }
+  .proto-tag {
+    font-size: 11px; font-weight: 600;
+    background: var(--purple-soft); color: var(--purple);
+    border-radius: 4px; padding: 2px 8px;
+    letter-spacing: 0.5px;
+  }
+
+  /* ---------------- Stat cards ---------------- */
+  .stat-cards {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 12px;
+    margin-bottom: 18px;
+  }
+  .stat-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    box-shadow: var(--shadow);
+  }
+  .stat-card__label { font-size: 12px; color: var(--text-3); display: flex; align-items: center; gap: 6px; }
+  .stat-card__value { font-size: 24px; font-weight: 700; margin-top: 6px; font-variant-numeric: tabular-nums; }
+  .stat-card__value small { font-size: 12px; font-weight: 500; color: var(--text-3); margin-left: 4px; }
+  .stat-card__value--success { color: var(--success); }
+  .stat-card__value--info { color: var(--info); }
+  .stat-card__value--accent { color: var(--accent); }
+  .stat-card__value--warning { color: var(--warning); }
+  .stat-ico { width: 14px; height: 14px; }
+
+  /* ---------------- Layout: subnav + panels ---------------- */
+  .workbench { display: flex; gap: 16px; align-items: flex-start; }
+  .subnav {
+    width: 168px; flex-shrink: 0;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 8px;
+    position: sticky; top: 0;
+  }
+  .subnav__item {
+    display: flex; align-items: center; gap: 9px;
+    padding: 9px 11px;
+    border-radius: var(--radius-sm);
+    color: var(--text-2);
+    cursor: pointer;
+    font-size: 13px;
+    margin-bottom: 2px;
+  }
+  .subnav__item:hover { background: var(--panel-2); }
+  .subnav__item.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+  .subnav__item svg { width: 15px; height: 15px; }
+  .subnav__health {
+    margin-top: 10px; padding: 10px 11px;
+    border-top: 1px solid var(--border);
+    font-size: 12px; color: var(--text-3);
+  }
+  .subnav__health-row { display: flex; align-items: center; gap: 7px; margin-top: 6px; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; }
+  .dot--ok { background: var(--success); }
+  .dot--err { background: var(--danger); }
+  .dot--warn { background: var(--warning); }
+
+  .panels { flex: 1; min-width: 0; }
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    margin-bottom: 16px;
+  }
+  .card__header {
+    display: flex; align-items: center; gap: 10px;
+    padding: 13px 18px;
+    border-bottom: 1px solid var(--border);
+  }
+  .card__title { font-size: 14px; font-weight: 600; }
+  .card__desc { font-size: 12px; color: var(--text-3); }
+  .card__body { padding: 16px 18px; }
+  .card__header .spacer { flex: 1; }
+
+  /* ---------------- PromQL editor ---------------- */
+  .prom-editor { display: flex; gap: 8px; }
+  .prom-editor__input {
+    flex: 1;
+    font-family: var(--mono);
+    font-size: 13px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    padding: 9px 12px;
+    background: var(--panel-2);
+    color: var(--text-1);
+    outline: none;
+  }
+  .prom-editor__input:focus { border-color: var(--accent); background: #fff; box-shadow: 0 0 0 3px var(--accent-soft); }
+  .toolbar { display: flex; align-items: center; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+  .chip {
+    font-size: 12px;
+    border: 1px solid var(--border);
+    background: var(--panel);
+    color: var(--text-2);
+    border-radius: 999px;
+    padding: 3px 11px;
+    cursor: pointer;
+  }
+  .chip:hover { border-color: var(--accent); color: var(--accent); }
+  .chip.active { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 600; }
+  .chip--ghost { border-style: dashed; color: var(--text-3); }
+  .range-label { font-size: 12px; color: var(--text-3); margin-right: 2px; }
+
+  /* ---------------- Chart ---------------- */
+  .chart-wrap { margin-top: 14px; }
+  .chart-legend { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 8px; }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-2); font-family: var(--mono); }
+  .legend-swatch { width: 14px; height: 3px; border-radius: 2px; }
+
+  /* ---------------- Tables ---------------- */
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th {
+    text-align: left; font-weight: 600; font-size: 12px;
+    color: var(--text-3);
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+    background: var(--panel-2);
+    white-space: nowrap;
+  }
+  td { padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: var(--panel-2); }
+  td.mono { font-family: var(--mono); font-size: 12.5px; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; font-family: var(--mono); }
+
+  .badge {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-size: 11.5px; font-weight: 600;
+    border-radius: 4px; padding: 2px 8px;
+  }
+  .badge--info { background: var(--info-soft); color: var(--info); }
+  .badge--warn { background: var(--warning-soft); color: var(--warning); }
+  .badge--error { background: var(--danger-soft); color: var(--danger); }
+  .badge--ok { background: var(--success-soft); color: var(--success); }
+  .badge--accent { background: var(--accent-soft); color: var(--accent); }
+  .badge--purple { background: var(--purple-soft); color: var(--purple); }
+  .badge--plain { background: var(--panel-2); color: var(--text-3); border: 1px solid var(--border); }
+
+  /* ---------------- Log filters ---------------- */
+  .filter-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .select, .text-input {
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    padding: 7px 10px;
+    font-size: 13px;
+    font-family: inherit;
+    background: var(--panel);
+    color: var(--text-1);
+    outline: none;
+  }
+  .select:focus, .text-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .text-input--grow { flex: 1; min-width: 180px; font-family: var(--mono); font-size: 12.5px; }
+
+  /* ---------------- SQL ---------------- */
+  .sql-editor {
+    font-family: var(--mono);
+    font-size: 13px;
+    width: 100%;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    padding: 11px 13px;
+    background: var(--panel-2);
+    color: var(--text-1);
+    min-height: 84px;
+    resize: vertical;
+    outline: none;
+    line-height: 1.6;
+  }
+  .sql-editor:focus { border-color: var(--accent); background: #fff; box-shadow: 0 0 0 3px var(--accent-soft); }
+  .sql-hint { font-size: 12px; color: var(--text-3); margin-top: 8px; display: flex; gap: 14px; }
+  .sql-hint code { font-family: var(--mono); background: var(--panel-2); padding: 1px 6px; border-radius: 4px; border: 1px solid var(--border); }
+
+  /* ---------------- Knowledge cards ---------------- */
+  .kb-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .kb-card {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    background: var(--panel);
+    transition: border-color 0.12s;
+  }
+  .kb-card:hover { border-color: var(--accent); }
+  .kb-card__top { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .kb-card__title { font-weight: 600; font-size: 13.5px; flex: 1; }
+  .kb-card__row { font-size: 12.5px; color: var(--text-2); margin-top: 7px; display: flex; gap: 7px; }
+  .kb-card__row b { color: var(--text-3); font-weight: 500; flex-shrink: 0; }
+  .kb-card__row span { font-family: var(--mono); font-size: 12px; }
+  .sim { font-size: 11.5px; color: var(--accent); font-weight: 700; font-family: var(--mono); }
+
+  /* ---------------- Health overview grid ---------------- */
+  .ds-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .ds-item {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 13px 15px;
+    display: flex; align-items: center; gap: 12px;
+    background: var(--panel);
+  }
+  .ds-item__icon {
+    width: 36px; height: 36px; border-radius: 8px;
+    display: grid; place-items: center;
+    font-size: 16px; font-weight: 700;
+    flex-shrink: 0;
+  }
+  .ds-item__icon--prom { background: var(--danger-soft); color: #e05252; }
+  .ds-item__icon--elk { background: var(--info-soft); color: var(--info); }
+  .ds-item__icon--db { background: var(--accent-soft); color: var(--accent); }
+  .ds-item__icon--kb { background: var(--purple-soft); color: var(--purple); }
+  .ds-item__icon--ssh { background: var(--warning-soft); color: var(--warning); }
+  .ds-item__icon--mcp { background: var(--success-soft); color: var(--success); }
+  .ds-item__meta { flex: 1; min-width: 0; }
+  .ds-item__name { font-weight: 600; font-size: 13.5px; display: flex; align-items: center; gap: 8px; }
+  .ds-item__sub { font-size: 12px; color: var(--text-3); font-family: var(--mono); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  /* ---------------- Cortex tool card demo ---------------- */
+  .toolcard {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--panel);
+    margin-bottom: 10px;
+    overflow: hidden;
+  }
+  .toolcard__row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 14px;
+    cursor: pointer;
+  }
+  .toolcard__row:hover { background: var(--panel-2); }
+  .toolcard__status { width: 16px; height: 16px; flex-shrink: 0; display: grid; place-items: center; }
+  .toolcard__name { font-family: var(--mono); font-size: 13px; font-weight: 600; }
+  .toolcard__name .args { color: var(--text-3); font-weight: 400; }
+  .toolcard__meta { margin-left: auto; display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-3); }
+  .toolcard__body { display: none; border-top: 1px solid var(--border); }
+  .toolcard.open .toolcard__body { display: block; }
+  .toolcard__section { padding: 10px 14px; }
+  .toolcard__section + .toolcard__section { border-top: 1px dashed var(--border); }
+  .toolcard__section-label { font-size: 11px; color: var(--text-3); margin-bottom: 6px; letter-spacing: 0.5px; }
+  pre.code {
+    font-family: var(--mono);
+    font-size: 12px;
+    background: #0f172a;
+    color: #cbd5e1;
+    border-radius: var(--radius-sm);
+    padding: 11px 13px;
+    overflow-x: auto;
+    line-height: 1.65;
+  }
+  pre.code .k { color: #7dd3fc; }
+  pre.code .s { color: #86efac; }
+  pre.code .n { color: #fca5a5; }
+  .spin {
+    width: 13px; height: 13px;
+    border: 2px solid var(--border-strong);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .proto-note {
+    margin-top: 24px;
+    padding: 14px 18px;
+    border: 1px dashed var(--border-strong);
+    border-radius: var(--radius);
+    background: var(--panel-2);
+    font-size: 12.5px;
+    color: var(--text-3);
+    line-height: 1.8;
+  }
+  .proto-note b { color: var(--text-2); }
+</style>
+</head>
+<body>
+
+<!-- ==================== 侧边栏 ==================== -->
+<aside class="sidenav">
+  <div class="sidenav__brand">
+    <div class="sidenav__logo">IP</div>
+    <div class="sidenav__brand-name">InfraPilot<small>AI SRE AGENT</small></div>
+  </div>
+
+  <div class="sidenav__group">
+    <div class="sidenav__group-label">工作台</div>
+    <div class="sidenav__item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
+      告警中心 <span class="count">3</span>
+    </div>
+    <div class="sidenav__item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+      诊断会话
+    </div>
+    <div class="sidenav__item active">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></svg>
+      数据源
+    </div>
+  </div>
+
+  <div class="sidenav__group">
+    <div class="sidenav__group-label">资源</div>
+    <div class="sidenav__item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+      知识库
+    </div>
+    <div class="sidenav__item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="6" r="2.5"/><circle cx="19" cy="6" r="2.5"/><circle cx="12" cy="18" r="2.5"/><path d="M7 7.5 10.5 16M17 7.5 13.5 16M7.5 6h9"/></svg>
+      服务拓扑
+    </div>
+    <div class="sidenav__item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3z"/></svg>
+      技能管理
+    </div>
+    <div class="sidenav__item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1-1.55 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.55-1H3a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.55-1 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34h.01a1.7 1.7 0 0 0 1-1.55V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87v.01a1.7 1.7 0 0 0 1.55 1H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.55 1z"/></svg>
+      系统设置
+    </div>
+  </div>
+
+  <div class="sidenav__footer">
+    <span class="sidenav__dot"></span> Gateway 已连接 · :8787
+  </div>
+</aside>
+
+<!-- ==================== 主区域 ==================== -->
+<main class="main">
+  <div class="topbar">
+    <div class="breadcrumb">工作台 / <b>数据源</b></div>
+    <div class="topbar__actions">
+      <button class="btn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg>
+        刷新
+      </button>
+      <button class="btn btn--primary">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4 12 14l-3-3"/></svg>
+        测试全部连接
+      </button>
+    </div>
+  </div>
+
+  <div class="page-header">
+    <div class="page-header__title">数据源工作台 <span class="proto-tag">设计原型</span></div>
+    <div class="page-header__subtitle">统一管理 Prometheus 指标、ELK 日志、数据库与知识库，支持在线查询与 Agent 诊断联动</div>
+  </div>
+
+  <!-- 统计卡 -->
+  <div class="stat-cards">
+    <div class="stat-card">
+      <div class="stat-card__label">
+        <svg class="stat-ico" viewBox="0 0 24 24" fill="none" stroke="#e05252" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+        指标后端
+      </div>
+      <div class="stat-card__value stat-card__value--success">2<small>在线</small></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-card__label">
+        <svg class="stat-ico" viewBox="0 0 24 24" fill="none" stroke="#0891b2" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
+        日志后端
+      </div>
+      <div class="stat-card__value stat-card__value--info">1<small>OpenSearch</small></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-card__label">
+        <svg class="stat-ico" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg>
+        数据库
+      </div>
+      <div class="stat-card__value stat-card__value--accent">3<small>只读</small></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-card__label">
+        <svg class="stat-ico" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+        知识案例
+      </div>
+      <div class="stat-card__value">128<small>条</small></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-card__label">
+        <svg class="stat-ico" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+        总体健康度
+      </div>
+      <div class="stat-card__value stat-card__value--success">5/6<small>正常</small></div>
+    </div>
+  </div>
+
+  <div class="workbench">
+    <!-- 左侧分类导航 -->
+    <nav class="subnav">
+      <div class="subnav__item active" data-panel="overview">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+        总览
+      </div>
+      <div class="subnav__item" data-panel="metrics">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+        指标查询
+      </div>
+      <div class="subnav__item" data-panel="logs">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h5"/></svg>
+        日志检索
+      </div>
+      <div class="subnav__item" data-panel="sql">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg>
+        SQL 查询
+      </div>
+      <div class="subnav__item" data-panel="kb">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+        知识库
+      </div>
+      <div class="subnav__health">
+        连接状态
+        <div class="subnav__health-row"><span class="dot dot--ok"></span> prom-prod :9090</div>
+        <div class="subnav__health-row"><span class="dot dot--ok"></span> opensearch :9200</div>
+        <div class="subnav__health-row"><span class="dot dot--ok"></span> sqlite-cases</div>
+        <div class="subnav__health-row"><span class="dot dot--warn"></span> mysql-billing :3306</div>
+        <div class="subnav__health-row"><span class="dot dot--err"></span> pg-registry :5432</div>
+      </div>
+    </nav>
+
+    <div class="panels">
+
+      <!-- ============ 总览 ============ -->
+      <section class="panel active" id="panel-overview">
+        <div class="card">
+          <div class="card__header">
+            <div>
+              <div class="card__title">已接入数据源</div>
+              <div class="card__desc">全部后端的连接状态与健康度（模拟数据）</div>
+            </div>
+            <div class="spacer"></div>
+            <button class="btn">管理配置 →</button>
+          </div>
+          <div class="card__body">
+            <div class="ds-grid">
+              <div class="ds-item">
+                <div class="ds-item__icon ds-item__icon--prom">Pr</div>
+                <div class="ds-item__meta">
+                  <div class="ds-item__name">prom-prod <span class="badge badge--ok">在线</span></div>
+                  <div class="ds-item__sub">http://prom-prod:9090 · scrape 30s</div>
+                </div>
+              </div>
+              <div class="ds-item">
+                <div class="ds-item__icon ds-item__icon--prom">Pr</div>
+                <div class="ds-item__meta">
+                  <div class="ds-item__name">prom-openstack <span class="badge badge--ok">在线</span></div>
+                  <div class="ds-item__sub">http://prom-os:9090 · cloud_name=云贯标</div>
+                </div>
+              </div>
+              <div class="ds-item">
+                <div class="ds-item__icon ds-item__icon--elk">ES</div>
+                <div class="ds-item__meta">
+                  <div class="ds-item__name">opensearch-main <span class="badge badge--ok">在线</span></div>
+                  <div class="ds-item__sub">https://127.0.0.1:9200 · 12 indices</div>
+                </div>
+              </div>
+              <div class="ds-item">
+                <div class="ds-item__icon ds-item__icon--db">DB</div>
+                <div class="ds-item__meta">
+                  <div class="ds-item__name">sqlite-cases <span class="badge badge--ok">在线</span></div>
+                  <div class="ds-item__sub">~/.infrapilot/knowledge.db · 只读</div>
+                </div>
+              </div>
+              <div class="ds-item">
+                <div class="ds-item__icon ds-item__icon--db">DB</div>
+                <div class="ds-item__meta">
+                  <div class="ds-item__name">mysql-billing <span class="badge badge--warn">慢响应</span></div>
+                  <div class="ds-item__sub">mysql://10.0.4.11:3306 · 只读账号</div>
+                </div>
+              </div>
+              <div class="ds-item">
+                <div class="ds-item__icon ds-item__icon--db">DB</div>
+                <div class="ds-item__meta">
+                  <div class="ds-item__name">pg-registry <span class="badge badge--error">离线</span></div>
+                  <div class="ds-item__sub">postgres://10.0.4.12:5432 · 连接超时</div>
+                </div>
+              </div>
+              <div class="ds-item">
+                <div class="ds-item__icon ds-item__icon--kb">KB</div>
+                <div class="ds-item__meta">
+                  <div class="ds-item__name">知识案例库 <span class="badge badge--ok">在线</span></div>
+                  <div class="ds-item__sub">128 cases · 语义检索已启用</div>
+                </div>
+              </div>
+              <div class="ds-item">
+                <div class="ds-item__icon ds-item__icon--ssh">SSH</div>
+                <div class="ds-item__meta">
+                  <div class="ds-item__name">远程主机 × 4 <span class="badge badge--ok">在线</span></div>
+                  <div class="ds-item__sub">只读命令代理 · 变更需审批</div>
+                </div>
+              </div>
+              <div class="ds-item">
+                <div class="ds-item__icon ds-item__icon--mcp">MCP</div>
+                <div class="ds-item__meta">
+                  <div class="ds-item__name">linux-mcp-server <span class="badge badge--ok">在线</span></div>
+                  <div class="ds-item__sub">gRPC :8443 · JWT 认证</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ 指标查询 ============ -->
+      <section class="panel" id="panel-metrics">
+        <div class="card">
+          <div class="card__header">
+            <div>
+              <div class="card__title">PromQL 查询 <span class="badge badge--accent">prom-prod</span></div>
+              <div class="card__desc">Ctrl + Enter 执行 · 支持历史与常用查询</div>
+            </div>
+            <div class="spacer"></div>
+            <span class="badge badge--plain">查询耗时 182ms</span>
+          </div>
+          <div class="card__body">
+            <div class="prom-editor">
+              <input class="prom-editor__input" value='sum by (pod) (rate(container_cpu_usage_seconds_total{namespace="openstack"}[5m]))' readonly />
+              <button class="btn btn--primary">执行</button>
+            </div>
+            <div class="toolbar">
+              <span class="range-label">时间范围</span>
+              <span class="chip">15m</span>
+              <span class="chip active">1h</span>
+              <span class="chip">6h</span>
+              <span class="chip">24h</span>
+              <span style="width:1px;height:16px;background:var(--border)"></span>
+              <span class="chip chip--ghost">CPU 使用率</span>
+              <span class="chip chip--ghost">内存压力</span>
+              <span class="chip chip--ghost">Pod 重启</span>
+              <span class="chip chip--ghost">网络吞吐</span>
+            </div>
+
+            <div class="chart-wrap">
+              <div class="chart-legend">
+                <div class="legend-item"><span class="legend-swatch" style="background:#2563eb"></span>cpu-usage{pod="ironic-api-0"}</div>
+                <div class="legend-item"><span class="legend-swatch" style="background:#7c3aed"></span>cpu-usage{pod="nova-compute-7f9d"}</div>
+                <div class="legend-item"><span class="legend-swatch" style="background:#0891b2"></span>cpu-usage{pod="neutron-agent-x2k"}</div>
+              </div>
+              <!-- 纯 SVG 模拟曲线图 -->
+              <svg id="chart" viewBox="0 0 860 260" width="100%" style="display:block">
+                <g font-size="11" fill="#8a93a6" font-family="Consolas, monospace">
+                  <line x1="50" y1="20" x2="50" y2="220" stroke="#e4e7ec"/>
+                  <line x1="50" y1="220" x2="850" y2="220" stroke="#e4e7ec"/>
+                  <g stroke="#eef1f5">
+                    <line x1="50" y1="70" x2="850" y2="70"/><line x1="50" y1="120" x2="850" y2="120"/><line x1="50" y1="170" x2="850" y2="170"/>
+                  </g>
+                  <text x="44" y="74" text-anchor="end">0.75</text>
+                  <text x="44" y="124" text-anchor="end">0.50</text>
+                  <text x="44" y="174" text-anchor="end">0.25</text>
+                  <text x="44" y="224" text-anchor="end">0</text>
+                  <text x="50" y="240" text-anchor="start">15:20</text>
+                  <text x="250" y="240">15:35</text>
+                  <text x="450" y="240">15:50</text>
+                  <text x="650" y="240">16:05</text>
+                  <text x="850" y="240" text-anchor="end">16:15</text>
+                </g>
+                <!-- 标注：异常区间 -->
+                <rect x="560" y="20" width="130" height="200" fill="rgba(220,38,38,0.05)"/>
+                <text x="625" y="34" text-anchor="middle" font-size="10" fill="#dc2626">▲ 异常升高区间</text>
+                <polyline fill="none" stroke="#2563eb" stroke-width="2" stroke-linejoin="round"
+                  points="50,190 90,185 130,192 170,178 210,182 250,170 290,175 330,160 370,168 410,155 450,162 490,148 530,140 560,110 590,72 620,60 650,68 680,95 710,120 740,150 770,165 810,172 850,168"/>
+                <polyline fill="none" stroke="#7c3aed" stroke-width="2" stroke-linejoin="round"
+                  points="50,205 90,200 130,208 170,195 210,200 250,190 290,196 330,185 370,190 410,180 450,186 490,175 530,168 560,150 590,128 620,118 650,124 680,140 710,155 740,170 770,180 810,186 850,182"/>
+                <polyline fill="none" stroke="#0891b2" stroke-width="2" stroke-linejoin="round" stroke-dasharray="1 0"
+                  points="50,212 90,210 130,214 170,208 210,212 250,206 290,210 330,204 370,208 410,200 450,206 490,198 530,194 560,186 590,178 620,172 650,176 680,184 710,192 740,198 770,204 810,208 850,206"/>
+              </svg>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card__header"><div class="card__title">当前值</div><div class="spacer"></div><span class="card__desc">instant query @ 16:15:00</span></div>
+          <table>
+            <thead><tr><th>series</th><th style="text-align:right">value</th><th>状态</th><th>对比 1h 前</th></tr></thead>
+            <tbody>
+              <tr><td class="mono">cpu-usage{pod="ironic-api-0", namespace="openstack"}</td><td class="num">0.62</td><td><span class="badge badge--error">高</span></td><td class="num" style="color:var(--danger)">+184%</td></tr>
+              <tr><td class="mono">cpu-usage{pod="nova-compute-7f9d", namespace="openstack"}</td><td class="num">0.31</td><td><span class="badge badge--warn">中</span></td><td class="num" style="color:var(--warning)">+42%</td></tr>
+              <tr><td class="mono">cpu-usage{pod="neutron-agent-x2k", namespace="openstack"}</td><td class="num">0.08</td><td><span class="badge badge--ok">正常</span></td><td class="num" style="color:var(--text-3)">+3%</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ============ 日志检索 ============ -->
+      <section class="panel" id="panel-logs">
+        <div class="card">
+          <div class="card__header">
+            <div>
+              <div class="card__title">日志检索 <span class="badge badge--info">opensearch-main</span></div>
+              <div class="card__desc">对齐 ELK Skill 语义：search_logs / aggregate / timeline</div>
+            </div>
+            <div class="spacer"></div>
+            <span class="badge badge--plain">命中 1,284 · 展示前 50</span>
+          </div>
+          <div class="card__body">
+            <div class="filter-row">
+              <select class="select"><option>namespace: openstack</option><option>namespace: default</option><option>全部</option></select>
+              <select class="select"><option>级别: 全部</option><option>ERROR</option><option>WARN</option></select>
+              <select class="select"><option>最近 1 小时</option><option>最近 15 分钟</option><option>最近 24 小时</option></select>
+              <input class="text-input text-input--grow" value='message: "oom" OR "restart"' readonly />
+              <button class="btn btn--primary">搜索</button>
+            </div>
+          </div>
+          <table>
+            <thead><tr><th style="width:130px">时间</th><th style="width:90px">级别</th><th style="width:170px">来源</th><th>消息</th></tr></thead>
+            <tbody>
+              <tr><td class="mono">16:14:52.331</td><td><span class="badge badge--error">ERROR</span></td><td class="mono">ironic-api-0</td><td class="mono">conductor heartbeat timeout, node=compute-04 reaping</td></tr>
+              <tr><td class="mono">16:14:31.017</td><td><span class="badge badge--warn">WARN</span></td><td class="mono">order-api</td><td class="mono">heap usage 91% (512Mi limit), GC pause 480ms</td></tr>
+              <tr><td class="mono">16:14:12.884</td><td><span class="badge badge--error">ERROR</span></td><td class="mono">kubelet</td><td class="mono">OOMKilled: order-api (exit 137), restart count 6</td></tr>
+              <tr><td class="mono">16:13:58.220</td><td><span class="badge badge--info">INFO</span></td><td class="mono">nova-scheduler</td><td class="mono">selected host compute-02 (retry=1, placement ok)</td></tr>
+              <tr><td class="mono">16:13:40.905</td><td><span class="badge badge--warn">WARN</span></td><td class="mono">neutron-agent-x2k</td><td class="mono">rpc retry 3/5, broker amqp://rabbit-0:5672</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ============ SQL 查询 ============ -->
+      <section class="panel" id="panel-sql">
+        <div class="card">
+          <div class="card__header">
+            <div>
+              <div class="card__title">SQL 查询 <span class="badge badge--purple">sqlite-cases</span> <span class="badge badge--ok">只读保护</span></div>
+              <div class="card__desc">仅允许 SELECT / EXPLAIN / SHOW / WITH 语句，默认 LIMIT 保护</div>
+            </div>
+          </div>
+          <div class="card__body">
+            <textarea class="sql-editor" readonly>SELECT skill, COUNT(*) AS calls,
+       SUM(CASE WHEN success THEN 1 ELSE 0 END) AS ok
+FROM audit_log
+WHERE created_at > datetime('now', '-1 day')
+GROUP BY skill
+ORDER BY calls DESC;</textarea>
+            <div class="sql-hint">
+              <span><code>Ctrl+Enter</code> 执行</span>
+              <span>数据源：<code>sqlite-cases</code> / <code>mysql-billing</code> / <code>pg-registry(离线)</code></span>
+              <span>maxRows = 200</span>
+            </div>
+          </div>
+          <table>
+            <thead><tr><th>skill</th><th style="text-align:right">calls</th><th style="text-align:right">ok</th><th style="text-align:right">成功率</th></tr></thead>
+            <tbody>
+              <tr><td class="mono">elk</td><td class="num">412</td><td class="num">408</td><td class="num">99.0%</td></tr>
+              <tr><td class="mono">linux</td><td class="num">327</td><td class="num">327</td><td class="num">100%</td></tr>
+              <tr><td class="mono">k8s</td><td class="num">296</td><td class="num">293</td><td class="num">99.0%</td></tr>
+              <tr><td class="mono">prom</td><td class="num">158</td><td class="num">158</td><td class="num">100%</td></tr>
+              <tr><td class="mono">knowledge</td><td class="num">94</td><td class="num">94</td><td class="num">100%</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ============ 知识库 ============ -->
+      <section class="panel" id="panel-kb">
+        <div class="card">
+          <div class="card__header">
+            <div>
+              <div class="card__title">案例检索</div>
+              <div class="card__desc">Agent 诊断时自动检索相似历史案例作为证据补充</div>
+            </div>
+            <div class="spacer"></div>
+            <span class="badge badge--plain">128 cases</span>
+          </div>
+          <div class="card__body">
+            <div class="filter-row">
+              <input class="text-input text-input--grow" value="pod 频繁重启 OOMKilled" readonly />
+              <button class="btn btn--primary">检索</button>
+            </div>
+          </div>
+          <div class="card__body" style="padding-top:0">
+            <div class="kb-grid">
+              <div class="kb-card">
+                <div class="kb-card__top">
+                  <span class="badge badge--accent">K8s</span>
+                  <div class="kb-card__title">内存泄漏导致 CrashLoopBackOff</div>
+                  <span class="sim">92%</span>
+                </div>
+                <div class="kb-card__row"><b>现象</b><span>pod restart count 持续增长，OOMKilled exit 137</span></div>
+                <div class="kb-card__row"><b>根因</b><span>order-api 未释放会话缓存，heap 线性增长</span></div>
+                <div class="kb-card__row"><b>处置</b><span>limit 200Mi→512Mi + 修复缓存淘汰逻辑</span></div>
+              </div>
+              <div class="kb-card">
+                <div class="kb-card__top">
+                  <span class="badge badge--purple">OpenStack</span>
+                  <div class="kb-card__title">ironic conductor 心跳超时</div>
+                  <span class="sim">78%</span>
+                </div>
+                <div class="kb-card__row"><b>现象</b><span>node provisioning 卡 DEPLOYING，conductor 离线</span></div>
+                <div class="kb-card__row"><b>根因</b><span>rabbitmq 队列堆积，心跳消息被丢弃</span></div>
+                <div class="kb-card__row"><b>处置</b><span>扩容 rabbit 镜像队列 + 调整 heartbeat_timeout</span></div>
+              </div>
+              <div class="kb-card">
+                <div class="kb-card__top">
+                  <span class="badge badge--info">ELK</span>
+                  <div class="kb-card__title">ERROR 日志突增 — 磁盘写满</div>
+                  <span class="sim">64%</span>
+                </div>
+                <div class="kb-card__row"><b>现象</b><span>/var/log 分区 100%，服务批量报 IO 错误</span></div>
+                <div class="kb-card__row"><b>处置</b><span>logrotate 收紧 + 清理 14 天前索引</span></div>
+              </div>
+              <div class="kb-card">
+                <div class="kb-card__top">
+                  <span class="badge badge--warn">Prometheus</span>
+                  <div class="kb-card__title">target 抓取失败 — externalLabels 校验</div>
+                  <span class="sim">51%</span>
+                </div>
+                <div class="kb-card__row"><b>现象</b><span>cloud_name 标签缺失，跨集群聚合无法区分</span></div>
+                <div class="kb-card__row"><b>处置</b><span>Prometheus CR externalLabels 注入</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ Cortex 工具卡预览 ============ -->
+      <section class="panel" id="panel-toolcard">
+        <div class="card">
+          <div class="card__header">
+            <div>
+              <div class="card__title">对话工具卡（Cortex 风格）</div>
+              <div class="card__desc">同一 toolCallId 的 start/result 合并为单卡，入参与结果默认折叠 · 点击行可展开</div>
+            </div>
+          </div>
+          <div class="card__body">
+
+            <div class="toolcard open">
+              <div class="toolcard__row">
+                <span class="toolcard__status">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+                </span>
+                <span class="toolcard__name">prom.range_query<span class="args">(query='rate(container_cpu_usage_seconds_total[5m])', range='1h')</span></span>
+                <span class="toolcard__meta"><span class="badge badge--plain">readonly</span> 182ms <span>▾</span></span>
+              </div>
+              <div class="toolcard__body">
+                <div class="toolcard__section">
+                  <div class="toolcard__section-label">输入参数</div>
+                  <pre class="code">{
+  <span class="k">"query"</span>: <span class="s">"sum by (pod) (rate(container_cpu_usage_seconds_total{namespace=\"openstack\"}[5m]))"</span>,
+  <span class="k">"start"</span>: <span class="n">"2026-09-28T15:15:00Z"</span>,
+  <span class="k">"end"</span>:   <span class="n">"2026-09-28T16:15:00Z"</span>,
+  <span class="k">"step"</span>:  <span class="s">"60s"</span>
+}</pre>
+                </div>
+                <div class="toolcard__section">
+                  <div class="toolcard__section-label">结果 · 3 series · trust_level=untrusted_data</div>
+                  <pre class="code">[
+  { <span class="k">"metric"</span>: {<span class="k">"pod"</span>: <span class="s">"ironic-api-0"</span>},      <span class="k">"max"</span>: <span class="n">0.62</span>, <span class="k">"avg"</span>: <span class="n">0.21</span> },
+  { <span class="k">"metric"</span>: {<span class="k">"pod"</span>: <span class="s">"nova-compute-7f9d"</span>}, <span class="k">"max"</span>: <span class="n">0.31</span>, <span class="k">"avg"</span>: <span class="n">0.14</span> },
+  { <span class="k">"metric"</span>: {<span class="k">"pod"</span>: <span class="s">"neutron-agent-x2k"</span>}, <span class="k">"max"</span>: <span class="n">0.08</span>, <span class="k">"avg"</span>: <span class="n">0.06</span> }
+]  <span style="color:#64748b">// 已截断展示</span></pre>
+                </div>
+              </div>
+            </div>
+
+            <div class="toolcard">
+              <div class="toolcard__row">
+                <span class="toolcard__status"><span class="spin"></span></span>
+                <span class="toolcard__name">elk.search_logs<span class="args">(query='oom OR restart', namespace='openstack', window='15m')</span></span>
+                <span class="toolcard__meta"><span class="badge badge--accent">执行中…</span> <span>▸</span></span>
+              </div>
+              <div class="toolcard__body">
+                <div class="toolcard__section"><div class="toolcard__section-label">流式接收中 — 已接收 1.2KB</div><pre class="code">{"hits":{"total":{"value":1284}, ...</pre></div>
+              </div>
+            </div>
+
+            <div class="toolcard">
+              <div class="toolcard__row">
+                <span class="toolcard__status">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2.4" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                </span>
+                <span class="toolcard__name">db.query<span class="args">(id='pg-registry', sql='SELECT * FROM nodes')</span></span>
+                <span class="toolcard__meta"><span class="badge badge--error">失败</span> timeout 5s <span>▸</span></span>
+              </div>
+              <div class="toolcard__body">
+                <div class="toolcard__section">
+                  <div class="toolcard__section-label">错误信息</div>
+                  <pre class="code"><span class="n">Error: connect ETIMEDOUT 10.0.4.12:5432</span>
+  at TCPConnectWrap.afterConnect — 数据源 pg-registry 不可达，建议切换只读副本</pre>
+                </div>
+              </div>
+            </div>
+
+            <div class="toolcard" style="border-color:#f59e0b">
+              <div class="toolcard__row">
+                <span class="toolcard__status" style="font-size:14px">🔒</span>
+                <span class="toolcard__name">k8s.patch_resource_limits<span class="args">(kind='Deployment', name='order-api', limits={memory:'512Mi'})</span></span>
+                <span class="toolcard__meta"><span class="badge badge--warn">medium · 待审批</span> call_id=a1f3…9c <span>▸</span></span>
+              </div>
+              <div class="toolcard__body">
+                <div class="toolcard__section">
+                  <div class="toolcard__section-label">变更预览（需人工批准后经 Command Gateway 执行）</div>
+                  <pre class="code"><span style="color:#f87171">- memory: 200Mi</span>
+<span style="color:#4ade80">+ memory: 512Mi</span></pre>
+                  <div style="display:flex;gap:8px;margin-top:10px">
+                    <button class="btn">拒绝</button>
+                    <button class="btn btn--primary">批准执行</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </div>
+
+  <div class="proto-note">
+    <b>原型说明：</b>本页面为静态设计原型，数据均为模拟。交互可试：① 左侧分类切换五个面板；② 工具卡点击行可展开/收起。
+    正式实现对应 <code style="font-family:var(--mono)">web/src/components/DataSourcesPage.tsx</code> + 后端
+    <code style="font-family:var(--mono)">/api/data-sources/*</code> 查询代理，配色与 <code style="font-family:var(--mono)">tokens.css</code> 保持一致（浅色主题）。
+    若需要深色主题版本或调整布局密度，请告知。
+  </div>
+</main>
+
+<script>
+  // 分类切换
+  document.querySelectorAll('.subnav__item[data-panel]').forEach(function (item) {
+    item.addEventListener('click', function () {
+      document.querySelectorAll('.subnav__item').forEach(function (i) { i.classList.remove('active'); });
+      document.querySelectorAll('.panel').forEach(function (p) { p.classList.remove('active'); });
+      item.classList.add('active');
+      document.getElementById('panel-' + item.dataset.panel).classList.add('active');
+    });
+  });
+  // 工具卡展开/收起
+  document.querySelectorAll('.toolcard__row').forEach(function (row) {
+    row.addEventListener('click', function () {
+      row.parentElement.classList.toggle('open');
+    });
+  });
+</script>
+</body>
+</html>

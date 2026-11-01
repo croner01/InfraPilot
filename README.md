@@ -4,6 +4,8 @@ AI SRE Agent（智能运维故障诊断 Agent）—— 面向 Kubernetes / Linux
 
 完整技术设计文档见 [`docs/InfraPilot-Agent-设计文档.md`](docs/InfraPilot-Agent-设计文档.md)（17章，覆盖架构/Agent状态机/MCP Skill体系/安全网关/部署方案等）。
 
+前端更新内容（数据源工作台 / Cortex 风格诊断会话 / 告警中心 / 技能市场与 Skill Factory / 用量统计 / 用户隔离）见 [`docs/前端更新说明.md`](docs/前端更新说明.md)。
+
 ## 当前实现（Phase 1 MVP，可运行）
 
 本仓库已落地一个**端到端可运行**的 MVP，而非纯前端 mock：

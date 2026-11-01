@@ -1,7 +1,11 @@
 // ============================================================================
 // Runtime Configuration Types
 //
-// 支持多类日志后端（ELK/OpenSearch、ClickHouse、Generic）与远程主机注册表。
+// 支持多类后端数据源：
+// - 日志后端（ELK/OpenSearch、ClickHouse、Generic）
+// - 指标后端（Prometheus / 兼容 VictoriaMetrics 等 PromQL API）
+// - 数据库后端（SQLite / MySQL / PostgreSQL，只读查询）
+// 以及远程主机注册表。
 // 所有凭据类字段建议通过环境变量名间接引用，避免明文落盘。
 // ============================================================================
 
@@ -60,6 +64,49 @@ export interface GenericBackend extends LogBackendBase {
 
 export type LogBackend = ElkBackend | ClickHouseBackend | GenericBackend;
 
+// -------------------- 指标后端（Prometheus） --------------------
+
+export interface PrometheusBackend {
+  id: string;
+  type: "prometheus";
+  name: string;
+  enabled: boolean;
+  /** Prometheus API 地址，如 http://prometheus:9090 */
+  url: string;
+  /** 全局外部标签（如 cloud_name），会附加到指标查询结果的展示中 */
+  externalLabels?: Record<string, string>;
+  /** 请求头，通常包含 Authorization；敏感头建议通过 headerEnv 间接注入 */
+  headers?: Record<string, string>;
+  /** 敏感请求头对应的 env var，例如 {"Authorization": "PROM_TOKEN"} */
+  headerEnv?: Record<string, string>;
+}
+
+// -------------------- 数据库后端（只读查询） --------------------
+
+export type DatabaseDialect = "sqlite" | "mysql" | "postgres";
+
+export interface DatabaseBackend {
+  id: string;
+  type: "database";
+  name: string;
+  enabled: boolean;
+  dialect: DatabaseDialect;
+  /** sqlite: 文件路径；mysql/postgres: 主机名 */
+  host: string;
+  port?: number;
+  /** 数据库名（sqlite 忽略） */
+  database?: string;
+  username?: string;
+  /** 密码优先从 passwordEnv 对应的环境变量读取 */
+  passwordEnv?: string;
+  /** 是否只读模式（默认 true，仅允许 SELECT/EXPLAIN/SHOW/DESCRIBE） */
+  readonly?: boolean;
+  /** 最大返回行数，默认 200 */
+  maxRows?: number;
+}
+
+// -------------------- LLM Providers --------------------
+
 export type LlmProviderType = "openai" | "deepseek" | "qwen" | "glm" | "moonshot" | "minimax" | "baichuan" | "anthropic" | "google" | "generic";
 
 export interface LlmProvider {
@@ -99,6 +146,8 @@ export interface MemoryConfig {
 
 export interface RuntimeConfig {
   logSystems?: LogBackend[];
+  metricSystems?: PrometheusBackend[];
+  databaseSystems?: DatabaseBackend[];
   hosts?: HostEntry[];
   llmProviders?: LlmProvider[];
   mcp?: McpConfig;

@@ -9,6 +9,7 @@ const alerts = [
     severity: 'p0' as const,
     title: 'order-api Pod CrashLoopBackOff',
     source: 'order-service/order-api · Prometheus',
+    service: 'order-api',
     startedAt: '2026-08-25T10:24:00Z',
     status: 'firing' as const,
   },

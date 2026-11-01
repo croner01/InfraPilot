@@ -16,6 +16,7 @@ import { executeTopologyTool } from "../skills/topology/tools.js";
 import { executeOpenStackTool } from "../skills/openstack/tools.js";
 import { executeDrawioTool } from "../skills/drawio/tools.js";
 import { executeSkillsTool } from "../skills/packages/tools.js";
+import { executePrometheusTool } from "../skills/prometheus/tools.js";
 import { insertAudit, getApproval } from "../db/db.js";
 import { computeArgsHash } from "./argsHash.js";
 
@@ -29,6 +30,8 @@ async function dispatch(skill: string, tool: string, args: Record<string, unknow
       return executeElkTool(tool, args);
     case "clickhouse":
       return executeClickhouseTool(tool, args);
+    case "prom":
+      return executePrometheusTool(tool, args);
     case "trace":
       return executeTraceTool(tool, args);
     case "knowledge":

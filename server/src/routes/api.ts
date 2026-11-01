@@ -4,7 +4,13 @@ import { startAgentTurn, resumeAgentTurn } from "../agent/orchestrator.js";
 import { getRealPodState, resetRealDemoScenario } from "../demo/realPodState.js";
 import { isAbnormalPod, listPods, readPod, listEventsForPod, type NormalizedPod } from "../skills/k8s/client.js";
 import { listAuditBySession, decideApproval, getApproval, listTimelineEvents, listAlerts } from "../db/db.js";
-import { listKnowledgeCases, searchKnowledgeCases, getKnowledgeCase, addKnowledgeCase } from "../skills/knowledge/store.js";
+import {
+  listKnowledgeCases,
+  searchKnowledgeCases,
+  getKnowledgeCase,
+  addKnowledgeCase,
+  deleteKnowledgeCase,
+} from "../skills/knowledge/store.js";
 import { executeDrawioTool, type LogRelation } from "../skills/drawio/tools.js";
 import { executeElkTool } from "../skills/elk/tools.js";
 import {
@@ -16,6 +22,7 @@ import {
 import type { KnowledgeCaseInput } from "../types.js";
 import { configRouter } from "./config.js";
 import { skillsRouter } from "./skills.js";
+import { dataSourcesRouter } from "./datasources.js";
 import { readFileSync } from "fs";
 import { resolve, join } from "path";
 
@@ -204,6 +211,30 @@ apiRouter.post("/demo/restart-scenario", async (_req, res) => {
 });
 
 apiRouter.use("/config", configRouter);
+apiRouter.use("/data-sources", dataSourcesRouter);
+
+// 数据源工作台：通用日志检索（走 elk skill，readonly）
+apiRouter.post("/elk/search", async (req, res) => {
+  const { namespace, index_prefix, service, level, keyword, limit, since } = req.body ?? {};
+  try {
+    const result = await executeElkTool("search_logs", {
+      namespace: namespace || undefined,
+      index_prefix: index_prefix || undefined,
+      service: service || undefined,
+      level: level || undefined,
+      keyword: keyword || undefined,
+      limit: limit ? Number(limit) : 50,
+      since: since || undefined,
+    });
+    if (!result.success) {
+      res.json({ ok: false, error: result.error ?? "日志查询失败" });
+      return;
+    }
+    res.json({ ok: true, data: result.data });
+  } catch (err: any) {
+    res.json({ ok: false, error: err?.message ?? String(err) });
+  }
+});
 
 // -------------------- Knowledge 案例管理 --------------------
 
@@ -221,6 +252,17 @@ apiRouter.get("/knowledge/cases/:id", async (req, res) => {
     const c = getKnowledgeCase(req.params.id);
     if (!c) return res.status(404).json({ error: "case not found" });
     res.json(c);
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? String(err) });
+  }
+});
+
+apiRouter.delete("/knowledge/cases/:id", async (req, res) => {
+  try {
+    if (!deleteKnowledgeCase(req.params.id)) {
+      return res.status(404).json({ error: "case not found" });
+    }
+    res.json({ ok: true });
   } catch (err: any) {
     res.status(500).json({ error: err?.message ?? String(err) });
   }

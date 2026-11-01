@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { executeKnowledgeTool, knowledgeTools } from "./tools.js";
-import { resetKnowledgeStore } from "./store.js";
+import { deleteKnowledgeCase, listKnowledgeCases, resetKnowledgeStore } from "./store.js";
 import { db } from "../../db/db.js";
 
 function resetDbCases() {
@@ -132,6 +132,28 @@ describe("Knowledge Skill", () => {
 
     expect(get.success).toBe(true);
     expect((get.data as any).id).toBe(caseId);
+  });
+
+  it("deletes a case and drops it from the vector index", async () => {
+    const add = await executeKnowledgeTool("add_case", {
+      title: "待删除案例",
+      problem_type: "OOMKilled",
+      severity: "p2",
+      summary: "order-api 因内存不足反复 OOMKilled",
+      root_causes: ["内存 limit 过低"],
+      solutions: ["上调 limit"],
+    });
+    const caseId = (add.data as any).case_id as string;
+    expect(listKnowledgeCases().some((c) => c.id === caseId)).toBe(true);
+
+    expect(deleteKnowledgeCase(caseId)).toBe(true);
+    expect(listKnowledgeCases().some((c) => c.id === caseId)).toBe(false);
+    expect(deleteKnowledgeCase(caseId)).toBe(false);
+
+    // 索引里也必须摘掉，否则语义检索还会命中已删案例
+    const search = await executeKnowledgeTool("search_similar_cases", { query: "order-api 内存 OOMKilled", limit: 5 });
+    const hits = search.data as Array<Record<string, unknown>>;
+    expect(hits.some((c) => c.id === caseId)).toBe(false);
   });
 
   it("returns error for unknown tool", async () => {

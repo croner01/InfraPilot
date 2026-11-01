@@ -5,6 +5,9 @@
   flex-direction: column;
   overflow: hidden;
   background: var(--bg);
+  /* 作为宽度查询容器：会话顶栏按「对话列实际宽度」取舍内容，而不是按视口 */
+  container-type: inline-size;
+  container-name: chat-col;
 }
 .ui-workspace > * {
   animation: ui-fade-in-up 0.18s ease both;

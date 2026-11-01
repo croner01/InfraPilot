@@ -1,13 +1,15 @@
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import {
   deleteHost,
   deleteLogSystem,
   deleteMemory,
+  fetchDatabaseSystems,
   fetchHosts,
   fetchLogSystems,
   fetchLlmProviders,
   fetchMcpConfig,
   fetchMemoryConfig,
+  fetchMetricSystems,
   fetchShipStatus,
   generateMcpSecret,
   listMemories,
@@ -21,6 +23,11 @@ import {
   deleteLlmProvider,
   testLlmProvider,
   setDefaultLlmProvider,
+  fetchK8sClusters,
+  fetchUsers,
+  createUser,
+  updateUser,
+  deleteUser,
   type HostEntry,
   type LogBackend,
   type LlmProvider,
@@ -29,22 +36,64 @@ import {
   type MemoryConfig,
   type MemoryEntry,
   type ShipTargetStatus,
+  type AdminUser,
+  type K8sCluster,
 } from "../lib/api.js";
 import { AppearanceSection } from "./settings/AppearanceSection.js";
+import { DatabaseSection, PrometheusSection } from "./settings/DataSourcesSection.js";
+import { K8sClusterSection } from "./settings/K8sClusterSection.js";
+import { EvalSection, SchedulesSection, TraceSection } from "./settings/AutomationSections.js";
+import type { DatabaseBackend, PrometheusBackend } from "../lib/api.js";
 
 const SECTIONS = [
   { id: "llm-providers", label: "模型配置" },
   { id: "log-systems", label: "日志系统后端" },
+  { id: "metric-systems", label: "指标数据源" },
+  { id: "database-systems", label: "数据库" },
+  { id: "trace-systems", label: "链路追踪 Trace" },
   { id: "remote-hosts", label: "远程主机" },
+  { id: "k8s-clusters", label: "K8s 集群" },
+  { id: "schedules", label: "定时任务" },
+  { id: "eval", label: "评测与回流" },
+  { id: "users", label: "用户与权限" },
   { id: "mcp-agent", label: "MCP Agent" },
   { id: "memory-management", label: "记忆管理" },
   { id: "appearance", label: "外观" },
 ] as const;
 
-export function SettingsPage({ notify }: { notify: (msg: string, type?: "error" | "success") => void }) {
+function SectionPane({
+  id,
+  active,
+  children,
+}: {
+  id: string;
+  active: boolean;
+  children: ReactNode;
+}) {
+  if (!active) return null;
+  return (
+    <section id={id} className="settings-section card">
+      {children}
+    </section>
+  );
+}
+
+export function SettingsPage({
+  notify,
+  requestedSection,
+  onSectionConsumed,
+}: {
+  notify: (msg: string, type?: "error" | "success") => void;
+  requestedSection?: string | null;
+  onSectionConsumed?: () => void;
+}) {
   const [logSystems, setLogSystems] = useState<LogBackend[]>([]);
   const [hosts, setHosts] = useState<HostEntry[]>([]);
   const [llmProviders, setLlmProviders] = useState<LlmProvider[]>([]);
+  const [metricSystems, setMetricSystems] = useState<PrometheusBackend[]>([]);
+  const [k8sClusters, setK8sClusters] = useState<K8sCluster[]>([]);
+  const [k8sLocalFallback, setK8sLocalFallback] = useState(false);
+  const [databaseSystems, setDatabaseSystems] = useState<DatabaseBackend[]>([]);
   const [mcpConfig, setMcpConfig] = useState<McpConfig>({ serverPort: 8443, jwtSecret: "" });
   const [memoryConfig, setMemoryConfig] = useState<MemoryConfig>({ enabled: true, recallTopK: 3 });
   const [memories, setMemories] = useState<MemoryEntry[]>([]);
@@ -54,13 +103,16 @@ export function SettingsPage({ notify }: { notify: (msg: string, type?: "error" 
 
   const load = async () => {
     setLoading(true);
-    const [l, h, p, m, memCfg, memList] = await Promise.all([
+    const [l, h, p, m, memCfg, memList, prom, dbs, k8s] = await Promise.all([
       fetchLogSystems((err) => notify(err.message)),
       fetchHosts((err) => notify(err.message)),
       fetchLlmProviders((err) => notify(err.message)),
       fetchMcpConfig((err) => notify(err.message)),
       fetchMemoryConfig((err) => notify(err.message)),
       listMemories((err) => notify(err.message)),
+      fetchMetricSystems((err) => notify(err.message)),
+      fetchDatabaseSystems((err) => notify(err.message)),
+      fetchK8sClusters((err) => notify(err.message)),
     ]);
     if (l) setLogSystems(l.systems);
     if (h) setHosts(h.hosts);
@@ -68,6 +120,12 @@ export function SettingsPage({ notify }: { notify: (msg: string, type?: "error" 
     if (m) setMcpConfig(m);
     if (memCfg) setMemoryConfig(memCfg);
     if (memList) setMemories(memList.memories);
+    if (prom) setMetricSystems(prom.systems);
+    if (dbs) setDatabaseSystems(dbs.systems);
+    if (k8s) {
+      setK8sClusters(k8s.clusters);
+      setK8sLocalFallback(!!k8s.localFallback);
+    }
     setLoading(false);
   };
 
@@ -75,78 +133,43 @@ export function SettingsPage({ notify }: { notify: (msg: string, type?: "error" 
     load();
   }, []);
 
-  // 滚动时高亮当前章节
-  useEffect(() => {
-    const container = contentRef.current;
-    if (!container) return;
-
-    const handleScroll = () => {
-      const top = container.scrollTop + 80;
-      for (let i = SECTIONS.length - 1; i >= 0; i--) {
-        const el = document.getElementById(SECTIONS[i].id);
-        if (el && el.offsetTop <= top) {
-          setActiveSection(SECTIONS[i].id);
-          break;
-        }
-      }
-    };
-
-    container.addEventListener("scroll", handleScroll);
-    return () => container.removeEventListener("scroll", handleScroll);
-  }, []);
-
-  const scrollTo = (id: string) => {
-    const el = document.getElementById(id);
-    const container = contentRef.current;
-    if (!el || !container) return;
-    container.scrollTo({ top: el.offsetTop - 16, behavior: "smooth" });
+  // 设置项一次只渲染一个分区：切换即换内容，内容再长也只在面板内滚动，
+  // 不会出现「为看最后一项要滚过前面全部分区」的问题。
+  const selectSection = (id: string) => {
     setActiveSection(id);
+    contentRef.current?.scrollTo({ top: 0 });
   };
 
-  const elkCount = logSystems.filter((s) => s.type === "elk").length;
-  const chCount = logSystems.filter((s) => s.type === "clickhouse").length;
-  const genericCount = logSystems.filter((s) => s.type === "generic").length;
-  const llmEnabledCount = llmProviders.filter((p) => p.enabled).length;
-  const llmDefaultName = llmProviders.find((p) => p.enabled && p.isDefault)?.name ?? "-";
+  // 从其它页面跳转过来时，直接切到指定分区
+  useEffect(() => {
+    if (!requestedSection || loading) return;
+    if (!SECTIONS.some((s) => s.id === requestedSection)) return;
+    const timer = window.setTimeout(() => {
+      selectSection(requestedSection);
+      onSectionConsumed?.();
+    }, 60);
+    return () => window.clearTimeout(timer);
+  }, [requestedSection, loading]);
+
+  // 导航徽标：把原来占满两行的 KPI 卡片信息，挪到对应设置项的右侧。
+  const SECTION_COUNTS: Record<string, number> = {
+    "llm-providers": llmProviders.length,
+    "log-systems": logSystems.length,
+    "metric-systems": metricSystems.length,
+    "database-systems": databaseSystems.length,
+    "remote-hosts": hosts.length,
+    "k8s-clusters": k8sClusters.length,
+    "memory-management": memories.length,
+  };
+  const sectionCount = (id: string): number | null => SECTION_COUNTS[id] ?? null;
 
   return (
     <div className="settings-page">
       <div className="page-header">
         <h1 className="page-header__title">系统设置</h1>
-        <p className="page-header__subtitle">管理大模型、日志系统后端、远程主机及其他运行时配置</p>
-      </div>
-
-      <div className="stat-cards">
-        <div className="stat-card">
-          <div className="stat-card__label">模型厂商</div>
-          <div className="stat-card__value">{llmProviders.length}</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-card__label">已启用模型</div>
-          <div className="stat-card__value stat-card__value--success">{llmEnabledCount}</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-card__label">默认模型</div>
-          <div className="stat-card__value stat-card__value--accent">{llmDefaultName}</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-card__label">ELK / ClickHouse / Generic</div>
-          <div className="stat-card__value stat-card__value--info">
-            {elkCount}/{chCount}/{genericCount}
-          </div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-card__label">远程主机</div>
-          <div className="stat-card__value stat-card__value--warning">{hosts.length}</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-card__label">MCP 端口</div>
-          <div className="stat-card__value stat-card__value--accent">{mcpConfig.serverPort}</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-card__label">历史记忆</div>
-          <div className="stat-card__value stat-card__value--info">{memories.length}</div>
-        </div>
+        <p className="page-header__subtitle">
+          管理大模型、数据源（日志 / 指标 / 数据库）、远程主机及其他运行时配置
+        </p>
       </div>
 
       <div className="settings-layout">
@@ -157,9 +180,12 @@ export function SettingsPage({ notify }: { notify: (msg: string, type?: "error" 
               <li key={s.id}>
                 <button
                   className={["settings-nav__item", activeSection === s.id ? "settings-nav__item--active" : ""].filter(Boolean).join(" ")}
-                  onClick={() => scrollTo(s.id)}
+                  onClick={() => selectSection(s.id)}
                 >
-                  {s.label}
+                  <span className="settings-nav__label">{s.label}</span>
+                  {sectionCount(s.id) !== null && (
+                    <span className="settings-nav__badge">{sectionCount(s.id)}</span>
+                  )}
                 </button>
               </li>
             ))}
@@ -171,7 +197,7 @@ export function SettingsPage({ notify }: { notify: (msg: string, type?: "error" 
             <Skeleton />
           ) : (
             <>
-              <section id="llm-providers" className="settings-section card">
+              <SectionPane id="llm-providers" active={activeSection === "llm-providers"}>
                 <div className="settings-section__header">
                   <div>
                     <h3 className="settings-section__title">模型配置</h3>
@@ -179,9 +205,9 @@ export function SettingsPage({ notify }: { notify: (msg: string, type?: "error" 
                   </div>
                 </div>
                 <LlmConfigPanel providers={llmProviders} onChange={setLlmProviders} notify={notify} />
-              </section>
+              </SectionPane>
 
-              <section id="log-systems" className="settings-section card">
+              <SectionPane id="log-systems" active={activeSection === "log-systems"}>
                 <div className="settings-section__header">
                   <div>
                     <h3 className="settings-section__title">日志系统后端</h3>
@@ -221,9 +247,41 @@ export function SettingsPage({ notify }: { notify: (msg: string, type?: "error" 
                     />
                   ))}
                 </div>
-              </section>
+              </SectionPane>
 
-              <section id="remote-hosts" className="settings-section card">
+              <SectionPane id="metric-systems" active={activeSection === "metric-systems"}>
+                <div className="settings-section__header">
+                  <div>
+                    <h3 className="settings-section__title">指标数据源（Prometheus）</h3>
+                    <p className="settings-section__desc">接入 Prometheus / VictoriaMetrics 等 PromQL API 后端，Agent 可在诊断中查询指标曲线，前端可在「数据源」工作台绘图。</p>
+                  </div>
+                </div>
+                <PrometheusSection systems={metricSystems} notify={notify} onSystemsChange={setMetricSystems} />
+              </SectionPane>
+
+              <SectionPane id="database-systems" active={activeSection === "database-systems"}>
+                <div className="settings-section__header">
+                  <div>
+                    <h3 className="settings-section__title">数据库</h3>
+                    <p className="settings-section__desc">只读接入业务数据库（SQLite / MySQL / PostgreSQL），用于数据核查与排查。</p>
+                  </div>
+                </div>
+                <DatabaseSection systems={databaseSystems} notify={notify} onSystemsChange={setDatabaseSystems} />
+              </SectionPane>
+
+              <SectionPane id="trace-systems" active={activeSection === "trace-systems"}>
+                <div className="settings-section__header">
+                  <div>
+                    <h3 className="settings-section__title">链路追踪（Trace）</h3>
+                    <p className="settings-section__desc">
+                      接入 Jaeger / Tempo / SkyWalking 等分布式追踪后端，Agent 可拉取调用链并构建服务依赖拓扑。
+                    </p>
+                  </div>
+                </div>
+                <TraceSection notify={notify} />
+              </SectionPane>
+
+              <SectionPane id="remote-hosts" active={activeSection === "remote-hosts"}>
                 <div className="settings-section__header">
                   <div>
                     <h3 className="settings-section__title">远程主机</h3>
@@ -231,9 +289,63 @@ export function SettingsPage({ notify }: { notify: (msg: string, type?: "error" 
                   </div>
                 </div>
                 <HostConfigPanel hosts={hosts} onChange={setHosts} notify={notify} />
-              </section>
+              </SectionPane>
 
-              <section id="mcp-agent" className="settings-section card">
+              <SectionPane id="k8s-clusters" active={activeSection === "k8s-clusters"}>
+                <div className="settings-section__header">
+                  <div>
+                    <h3 className="settings-section__title">K8s 集群</h3>
+                    <p className="settings-section__desc">
+                      接入远端 Kubernetes 集群，Agent 可对其执行检查与变更；变更类操作需人工审批，审批卡会标注目标集群。
+                    </p>
+                  </div>
+                </div>
+                <K8sClusterSection
+                  clusters={k8sClusters}
+                  localFallback={k8sLocalFallback}
+                  notify={notify}
+                  onClustersChange={setK8sClusters}
+                />
+              </SectionPane>
+
+              <SectionPane id="schedules" active={activeSection === "schedules"}>
+                <div className="settings-section__header">
+                  <div>
+                    <h3 className="settings-section__title">定时任务</h3>
+                    <p className="settings-section__desc">
+                      以 Cron 表达式周期性触发诊断指令，自动生成诊断会话，适合夜间巡检与定式健康检查。
+                    </p>
+                  </div>
+                </div>
+                <SchedulesSection notify={notify} />
+              </SectionPane>
+
+              <SectionPane id="eval" active={activeSection === "eval"}>
+                <div className="settings-section__header">
+                  <div>
+                    <h3 className="settings-section__title">评测与回流</h3>
+                    <p className="settings-section__desc">
+                      LLM-as-judge 对诊断会话打分；把真实会话回流为回归用例，持续度量 Agent 结论质量。
+                    </p>
+                  </div>
+                </div>
+                <EvalSection notify={notify} />
+              </SectionPane>
+
+              <SectionPane id="users" active={activeSection === "users"}>
+                <div className="settings-section__header">
+                  <div>
+                    <h3 className="settings-section__title">用户与权限</h3>
+                    <p className="settings-section__desc">
+                      多用户隔离与 RBAC（管理员 / 值班 SRE / 只读观察）。审批遵循双人原则：发起人不能审批自己的变更。
+                      当前为前端演示数据，users 表与 JWT 认证后端上线后自动生效。
+                    </p>
+                  </div>
+                </div>
+                <UsersSection notify={notify} />
+              </SectionPane>
+
+              <SectionPane id="mcp-agent" active={activeSection === "mcp-agent"}>
                 <div className="settings-section__header">
                   <div>
                     <h3 className="settings-section__title">MCP Agent</h3>
@@ -241,9 +353,9 @@ export function SettingsPage({ notify }: { notify: (msg: string, type?: "error" 
                   </div>
                 </div>
                 <McpConfigPanel config={mcpConfig} onChange={setMcpConfig} notify={notify} />
-              </section>
+              </SectionPane>
 
-              <section id="memory-management" className="settings-section card">
+              <SectionPane id="memory-management" active={activeSection === "memory-management"}>
                 <div className="settings-section__header">
                   <div>
                     <h3 className="settings-section__title">记忆管理</h3>
@@ -257,17 +369,11 @@ export function SettingsPage({ notify }: { notify: (msg: string, type?: "error" 
                   onMemoriesChange={setMemories}
                   notify={notify}
                 />
-              </section>
+              </SectionPane>
 
-              <section id="appearance" className="settings-section card">
+              <SectionPane id="appearance" active={activeSection === "appearance"}>
                 <AppearanceSection />
-              </section>
-
-              <div className="settings-footer">
-                <button className="btn btn--secondary btn--sm" onClick={() => contentRef.current?.scrollTo({ top: 0, behavior: "smooth" })}>
-                  返回顶部
-                </button>
-              </div>
+              </SectionPane>
             </>
           )}
         </div>
@@ -1107,6 +1213,214 @@ function Skeleton() {
       <div className="skeleton-row" />
       <div className="skeleton-row" />
       <div className="skeleton-row" />
+    </div>
+  );
+}
+
+/* ================= 用户与权限（后端 /api/auth/users） ================= */
+
+const ROLE_LABEL: Record<AdminUser["role"], string> = {
+  admin: "管理员",
+  "on-call": "值班 SRE",
+  viewer: "只读观察",
+};
+
+const ROLE_OPTIONS: AdminUser["role"][] = ["admin", "on-call", "viewer"];
+
+interface UserDraft {
+  displayName: string;
+  role: AdminUser["role"];
+  password: string;
+  disabled: boolean;
+}
+
+const EMPTY_NEW_USER = { username: "", displayName: "", role: "viewer" as AdminUser["role"], password: "" };
+
+function UsersSection({ notify }: { notify: (msg: string, type?: "error" | "success") => void }) {
+  const [users, setUsers] = useState<AdminUser[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [draft, setDraft] = useState<UserDraft>({ displayName: "", role: "viewer", password: "", disabled: false });
+  const [creating, setCreating] = useState(false);
+  const [newUser, setNewUser] = useState({ ...EMPTY_NEW_USER });
+
+  // 权限不足时不再弹红色报错：/auth/users 是管理员接口，未登录/非管理员属于预期情况
+  const [denied, setDenied] = useState<null | "unauthenticated" | "forbidden">(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const res = await fetchUsers((err) => {
+      if (err.status === 401) setDenied("unauthenticated");
+      else if (err.status === 403) setDenied("forbidden");
+      else notify(err.message);
+    });
+    if (res) {
+      setUsers(res.users);
+      setDenied(null);
+    }
+    setLoading(false);
+  }, [notify]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const startEdit = (u: AdminUser) => {
+    setCreating(false);
+    setEditingId(u.id);
+    setDraft({ displayName: u.displayName, role: u.role, password: "", disabled: !!u.disabled });
+  };
+
+  const saveEdit = async (id: string) => {
+    const patch: { displayName: string; role: AdminUser["role"]; disabled: boolean; password?: string } = {
+      displayName: draft.displayName,
+      role: draft.role,
+      disabled: draft.disabled,
+    };
+    if (draft.password) patch.password = draft.password;
+    const res = await updateUser(id, patch, (err) => notify(err.message));
+    if (!res) return;
+    setEditingId(null);
+    notify("用户已更新", "success");
+    void load();
+  };
+
+  const removeUser = async (u: AdminUser) => {
+    if (!window.confirm(`确认删除用户 ${u.username}？`)) return;
+    const res = await deleteUser(u.id, (err) => notify(err.message));
+    if (!res) return;
+    notify("用户已删除", "success");
+    void load();
+  };
+
+  const submitNewUser = async () => {
+    if (!newUser.username.trim() || !newUser.password.trim()) {
+      notify("用户名与密码必填");
+      return;
+    }
+    const res = await createUser(
+      {
+        username: newUser.username.trim(),
+        displayName: newUser.displayName.trim() || undefined,
+        role: newUser.role,
+        password: newUser.password,
+      },
+      (err) => notify(err.message),
+    );
+    if (!res) return;
+    setCreating(false);
+    setNewUser({ ...EMPTY_NEW_USER });
+    notify("用户已创建", "success");
+    void load();
+  };
+
+  if (denied) {
+    return (
+      <div className="empty-state">
+        <div className="empty-state__icon">🔒</div>
+        <div className="empty-state__message">
+          {denied === "forbidden"
+            ? "当前账号不是管理员，无权查看用户列表（可改用 admin 账号登录）"
+            : "需要以管理员身份登录后才能管理用户"}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 10 }}>
+        {creating ? (
+          <div style={{ display: "flex", gap: 8 }}>
+            <button className="btn btn--sm" onClick={() => setCreating(false)}>取消</button>
+            <button className="btn btn--sm btn--primary" onClick={submitNewUser}>创建</button>
+          </div>
+        ) : (
+          <button className="btn btn--sm" onClick={() => { setEditingId(null); setCreating(true); }}>新建用户</button>
+        )}
+      </div>
+      <table className="usage-table" style={{ border: "1px solid var(--border-color, #e4e7ec)", borderRadius: 8, overflow: "hidden" }}>
+        <thead>
+          <tr>
+            <th>用户</th>
+            <th>角色</th>
+            <th style={{ textAlign: "right" }}>诊断会话</th>
+            <th style={{ textAlign: "right" }}>Token 消耗</th>
+            <th style={{ textAlign: "right" }}>操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          {creating && (
+            <tr>
+              <td className="usage-table__title">
+                <input className="input" placeholder="用户名" value={newUser.username} onChange={(e) => setNewUser({ ...newUser, username: e.target.value })} style={{ width: 130 }} />
+                <input className="input" placeholder="显示名（可选）" value={newUser.displayName} onChange={(e) => setNewUser({ ...newUser, displayName: e.target.value })} style={{ width: 130, marginLeft: 6 }} />
+              </td>
+              <td>
+                <select className="input" value={newUser.role} onChange={(e) => setNewUser({ ...newUser, role: e.target.value as AdminUser["role"] })}>
+                  {ROLE_OPTIONS.map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
+                </select>
+              </td>
+              <td className="num">—</td>
+              <td className="num">—</td>
+              <td className="num">
+                <input className="input" type="password" placeholder="初始密码" value={newUser.password} onChange={(e) => setNewUser({ ...newUser, password: e.target.value })} style={{ width: 110 }} />
+              </td>
+            </tr>
+          )}
+          {loading && users.length === 0 && (
+            <tr>
+              <td className="usage-table__title" colSpan={5}>加载中…</td>
+            </tr>
+          )}
+          {users.map((u) => (
+            <Fragment key={u.id}>
+              <tr>
+                <td className="usage-table__title">
+                  {u.displayName} <code style={{ fontFamily: "var(--mono-font, monospace)", fontSize: 11, color: "var(--text-tertiary, #8a93a6)" }}>{u.username}</code>
+                  {u.disabled && <span className="tag tag--warn" style={{ marginLeft: 6 }}>已禁用</span>}
+                </td>
+                <td><span className="usage-model-chip">{ROLE_LABEL[u.role]}</span></td>
+                <td className="num">{u.sessionCount ?? 0}</td>
+                <td className="num">{Math.round((u.totalTokens ?? 0) / 1000)}k</td>
+                <td className="num">
+                  <button className="btn btn--sm btn--ghost" onClick={() => startEdit(u)}>编辑</button>
+                  <button className="btn btn--sm btn--danger-ghost" style={{ marginLeft: 6 }} onClick={() => removeUser(u)}>删除</button>
+                </td>
+              </tr>
+              {editingId === u.id && (
+                <tr>
+                  <td className="usage-table__title">
+                    <input className="input" value={draft.displayName} onChange={(e) => setDraft({ ...draft, displayName: e.target.value })} style={{ width: 160 }} />
+                  </td>
+                  <td>
+                    <select className="input" value={draft.role} onChange={(e) => setDraft({ ...draft, role: e.target.value as AdminUser["role"] })}>
+                      {ROLE_OPTIONS.map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
+                    </select>
+                  </td>
+                  <td className="num">
+                    <input className="input" type="password" placeholder="新密码（留空不改）" value={draft.password} onChange={(e) => setDraft({ ...draft, password: e.target.value })} style={{ width: 150 }} />
+                  </td>
+                  <td className="num">
+                    <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12 }}>
+                      <input type="checkbox" checked={draft.disabled} onChange={(e) => setDraft({ ...draft, disabled: e.target.checked })} />
+                      禁用
+                    </label>
+                  </td>
+                  <td className="num">
+                    <button className="btn btn--sm" onClick={() => setEditingId(null)}>取消</button>
+                    <button className="btn btn--sm btn--primary" style={{ marginLeft: 6 }} onClick={() => saveEdit(u.id)}>保存</button>
+                  </td>
+                </tr>
+              )}
+            </Fragment>
+          ))}
+        </tbody>
+      </table>
+      <div className="settings-hint" style={{ marginTop: 10 }}>
+        角色权限矩阵：管理员可管理用户与全部数据源；值班 SRE 可创建诊断并发起/执行审批；只读观察仅可查看，无审批权限。
+        会话/审计/审批按 user_id 行级隔离已生效；OIDC/LDAP 单点登录尚未接入。
+      </div>
     </div>
   );
 }

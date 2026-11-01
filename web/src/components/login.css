@@ -1,0 +1,175 @@
+/* ================= 登录页 & 用户菜单（前端演示版） ================= */
+
+.login-page {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(1000px 500px at 20% -10%, rgba(37, 99, 235, 0.12), transparent),
+    radial-gradient(800px 400px at 90% 110%, rgba(124, 58, 237, 0.12), transparent),
+    var(--bg, #f6f7f9);
+}
+
+.login-card {
+  width: 400px;
+  background: var(--panel, #fff);
+  border: 1px solid var(--border, #e4e7ec);
+  border-radius: 14px;
+  box-shadow: 0 12px 40px rgba(16, 24, 40, 0.08);
+  padding: 30px 32px 26px;
+}
+
+.login-card__brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.login-card__logo {
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #2563eb, #7c3aed);
+  color: #fff;
+  display: grid;
+  place-items: center;
+}
+
+.login-card__name { font-size: 18px; font-weight: 700; }
+.login-card__sub { font-size: 12px; color: var(--text-3, #8a93a6); }
+
+.login-card__form { display: flex; flex-direction: column; gap: 14px; }
+
+.login-field { display: flex; flex-direction: column; gap: 6px; }
+.login-field span { font-size: 12.5px; color: var(--text-2, #4b5565); font-weight: 600; }
+.login-field input,
+.login-field select {
+  border: 1px solid var(--border-strong, #d0d5dd);
+  border-radius: 8px;
+  padding: 9px 12px;
+  font-size: 13.5px;
+  font-family: inherit;
+  outline: none;
+  background: var(--panel-2, #fafbfc);
+  color: var(--text-1, #1a2233);
+}
+.login-field input:focus,
+.login-field select:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+  background: #fff;
+}
+
+.login-card__error {
+  font-size: 12.5px;
+  color: var(--danger, #dc2626);
+  background: rgba(220, 38, 38, 0.07);
+  border-radius: 6px;
+  padding: 8px 11px;
+}
+
+.login-card__btn {
+  border: none;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #2563eb, #7c3aed);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 11px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.login-card__btn:hover { opacity: 0.92; }
+.login-card__btn:disabled { opacity: 0.6; cursor: default; }
+
+.login-card__hint {
+  font-size: 11.5px;
+  color: var(--text-3, #8a93a6);
+  text-align: center;
+  line-height: 1.6;
+}
+
+/* ---- TopBar 用户菜单 ---- */
+
+.user-menu { position: relative; }
+
+.user-menu__trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--border, #e4e7ec);
+  background: var(--panel, #fff);
+  border-radius: 999px;
+  padding: 4px 10px 4px 4px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.user-menu__trigger:hover { border-color: #2563eb; }
+
+.user-menu__avatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+}
+
+.user-menu__name { font-size: 12.5px; font-weight: 600; color: var(--text-1, #1a2233); }
+.user-menu__caret { font-size: 10px; color: var(--text-3, #8a93a6); }
+
+.user-menu__pop {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  width: 240px;
+  background: var(--panel, #fff);
+  border: 1px solid var(--border, #e4e7ec);
+  border-radius: 10px;
+  box-shadow: 0 8px 28px rgba(16, 24, 40, 0.12);
+  padding: 12px 14px;
+  z-index: 60;
+}
+
+.user-menu__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.user-menu__title { font-weight: 700; font-size: 13.5px; flex: 1; }
+.user-menu__role { font-size: 11px; font-weight: 700; }
+
+.user-menu__row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--text-2, #4b5565);
+  line-height: 2;
+}
+.user-menu__row code {
+  font-family: var(--mono, monospace);
+  font-size: 11px;
+  background: var(--panel-2, #f6f7f9);
+  border-radius: 4px;
+  padding: 1px 6px;
+}
+
+.user-menu__logout {
+  width: 100%;
+  margin-top: 8px;
+  border: 1px solid var(--border-strong, #d0d5dd);
+  background: var(--panel, #fff);
+  border-radius: 7px;
+  padding: 7px;
+  font-size: 12.5px;
+  cursor: pointer;
+  color: var(--danger, #dc2626);
+  font-family: inherit;
+}
+.user-menu__logout:hover { border-color: var(--danger, #dc2626); }

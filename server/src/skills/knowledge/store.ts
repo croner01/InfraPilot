@@ -9,7 +9,7 @@
 
 import { v4 as uuidv4 } from "uuid";
 import type { KnowledgeCase, KnowledgeCaseInput } from "../../types.js";
-import { listCases, insertCase, getCase, type CaseRow } from "../../db/db.js";
+import { listCases, insertCase, getCase, deleteCase, type CaseRow } from "../../db/db.js";
 import { createEmbedder, type Embedder, type EmbeddingVector } from "../registry/embedder.js";
 import { InMemoryEmbeddingStore } from "../registry/store.js";
 
@@ -136,6 +136,13 @@ class KnowledgeStore {
     return listCases().map(rowToCase);
   }
 
+  /** 删除案例：先删库，再从向量索引摘掉，避免搜索结果里留下已删案例 */
+  remove(id: string): boolean {
+    if (!deleteCase(id)) return false;
+    this.index.remove(id);
+    return true;
+  }
+
   reset(): void {
     this.index.clear();
     this.initialized = false;
@@ -171,6 +178,10 @@ export function getKnowledgeCase(id: string): KnowledgeCase | undefined {
 
 export function listKnowledgeCases(): KnowledgeCase[] {
   return globalStore.all();
+}
+
+export function deleteKnowledgeCase(id: string): boolean {
+  return globalStore.remove(id);
 }
 
 // 测试用

@@ -7,21 +7,13 @@ const baseProps = {
   activeView: 'alerts' as const,
   alertCount: 3,
   onNavigate: () => {},
-  activeSessions: [],
-  closedSessions: [],
-  currentId: null,
-  search: '',
-  onSearch: () => {},
-  onSelect: () => {},
-  onDelete: () => {},
-  onTitleSave: () => {},
 }
 
 describe('SideNav', () => {
   it('renders nav items with alert count badge', () => {
     render(<SideNav {...baseProps} />)
     expect(screen.getByText('告警中心')).toBeInTheDocument()
-    expect(screen.getByText('会话中心')).toBeInTheDocument()
+    expect(screen.getByText('诊断会话')).toBeInTheDocument()
     expect(screen.getByText('知识库')).toBeInTheDocument()
     expect(screen.getByText('3')).toBeInTheDocument()
   })
@@ -30,13 +22,13 @@ describe('SideNav', () => {
     const onNavigate = vi.fn()
     const user = userEvent.setup()
     render(<SideNav {...baseProps} activeView="sessions" onNavigate={onNavigate} />)
-    expect(screen.getByText('会话中心').parentElement?.className).toContain('active')
+    expect(screen.getByText('诊断会话').parentElement?.className).toContain('active')
     await user.click(screen.getByText('知识库'))
     expect(onNavigate).toHaveBeenCalledWith('knowledge')
   })
 
-  it('shows session list when sessions view is active', () => {
-    render(<SideNav {...baseProps} activeView="sessions" />)
-    expect(screen.getByPlaceholderText('搜索会话...')).toBeInTheDocument()
+  it('keeps the nav column free of the session list (它已独立成列)', () => {
+    const { container } = render(<SideNav {...baseProps} activeView="sessions" />)
+    expect(container.querySelector('.ui-session-list')).toBeNull()
   })
 })

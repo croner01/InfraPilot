@@ -1,19 +1,41 @@
 import type { Meta, StoryObj } from '@storybook/react-vite'
-import { ProcessSection } from './ProcessSection.js'
+import { EvidenceChips, ToolCallCard, ToolGroupCard, ThinkCard } from './ProcessSection.js'
 
-const meta: Meta<typeof ProcessSection> = {
+const meta: Meta<typeof ToolCallCard> = {
   title: 'conversation/ProcessSection',
-  component: ProcessSection,
+  component: ToolCallCard,
 }
 export default meta
-type Story = StoryObj<typeof ProcessSection>
+type Story = StoryObj<typeof ToolCallCard>
 
 export const Default: Story = {
-  args: {
-    items: [
-      { key: 't1', icon: 'tool', status: 'running', title: 'k8s.describe_pod()' },
-      { key: 't2', icon: 'result', status: 'ok', title: 'elk.search_logs(service=order-api)' },
-      { key: 'e1', icon: 'evidence', title: '新增证据', detail: 'Pod 事件：OOMKilled，退出码 137' },
-    ],
-  },
+  render: () => (
+    <div style={{ padding: 24, maxWidth: 760 }}>
+      <ThinkCard text="先确认 Pod 状态与重启次数，再拉取日志与内存指标交叉验证。" defaultOpen />
+      <ToolCallCard
+        item={{
+          key: 't1',
+          icon: 'tool',
+          status: 'ok',
+          title: 'k8s.get_pod_status()',
+          riskLevel: 'readonly',
+          durationMs: 240,
+          args: { name: 'order-api-7f9d8b6c-x2kq', namespace: 'default' },
+          resultText: '{"phase":"Running","restarts":6}',
+        }}
+      />
+      <ToolGroupCard
+        group={{
+          key: 'g1',
+          isGroup: true,
+          label: '批量采集',
+          items: [
+            { key: 't2', icon: 'tool', status: 'ok', title: 'elk.search_logs()', durationMs: 512 },
+            { key: 't3', icon: 'tool', status: 'ok', title: 'prom.range_query()', durationMs: 178 },
+          ],
+        }}
+      />
+      <EvidenceChips items={[{ id: 'e1', label: 'OOMKilled · exit 137' }, { id: 'e2', label: 'heap 91% 线性增长' }]} />
+    </div>
+  ),
 }

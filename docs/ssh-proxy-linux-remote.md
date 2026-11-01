@@ -228,7 +228,42 @@ RUN_E2E_TESTS=true npx vitest run src/gateway/sshProxy.e2e.test.ts
    - Phase 2 将 SSH Proxy 替换/补充为 `linux-mcp-server` 常驻 Agent
    - 常驻 Agent 以 gRPC 提供结构化接口，避免裸 shell 执行
 
-## 10. 文件清单
+## 10. Python 后端（py-server，当前线上实现）
+
+线上部署的是 `py-server`（FastAPI）。同一能力在 Python 侧等价实现如下：
+
+| 文件 | 说明 |
+|---|---|
+| `py-server/infrapilot/remote.py` | SSH 通道：主机注册表读取、只读白名单校验、paramiko 执行、输出脱敏 |
+| `py-server/infrapilot/skills/linux.py` | `execute_on_host()` 路由（local / SSH）+ `inspect_files` 工具 |
+| `py-server/infrapilot/policy.py` | `host != local` 时把只读工具升级为 `medium`（强制人工审批） |
+| `py-server/tests/test_remote_host.py` | 白名单/审批升级/指纹差分单元测试 |
+
+### 10.1 审批规则（Python）
+
+- `host="local"`：按工具声明的风险级执行（只读工具自动执行）。
+- `host=<别名>` 或 `hosts` 含非 local 项：**一律要求人工审批**（`level=medium`），
+  审批卡片展示 `blastRadius`（目标主机 + 只读白名单说明）与 `ssh <host> -- <cmd>` 预览。
+
+### 10.2 `inspect_files`：跨主机宿主路径指纹差分
+
+```jsonc
+{
+  "hosts": ["node-1", "node-2", "node-3"],   // Host Registry 别名，可含 "local"
+  "paths": ["/usr/local/bin/helm"],          // 必须绝对路径
+  "hash": false                              // true 时额外比对 sha256
+}
+```
+
+返回每个主机的 `type/size/mtime/mode`（可选 `sha256`），并给出 `differing` 差异清单。
+用途：当同一 Deployment 的副本"只在与某节点上崩溃"时，直接比对各节点共享的
+hostPath 组件（二进制/驱动/配置）是否发生版本漂移 —— 这是"多轮排查找不到真实根因"
+时最有效的判别量。
+
+> 注意：`differing` 只在**实际比对到多个主机**时才有意义；目标主机必须能被 SSH 登录，
+> 且目标节点上的路径在容器视角可读（宿主文件系统路径，而非 Pod 内路径）。
+
+## 11. 文件清单
 
 | 文件 | 说明 |
 |---|---|

@@ -1,0 +1,80 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: order-api-script
+  namespace: order-service
+data:
+  worker.mjs: |
+    // ============================================================================
+    // order-api 演示工作负载 —— 部署为真实 K8s Pod 运行
+    //
+    // 与 server/src/demo/orderApiWorker.mjs 的关键区别:
+    //   - 不再自我 exit(137) 模拟 OOMKilled, 而是持续泄漏内存直到触发真实的
+    //     kubelet/cgroup OOM Kill(由 Pod 的 resources.limits.memory 控制)。
+    //     这样 Agent 排查到的 "OOMKilled" 状态、exit code 137、Pod 重启次数,
+    //     全部来自真实 K8s control plane 上报的数据, 而非应用自报。
+    //   - 日志写到 stdout, 由 containerd CRI 落盘到
+    //     /var/log/pods/<ns>_<pod>_<uid>/<container>/*.log, 供采集管道读取后
+    //     索引到 OpenSearch。
+    //
+    // Env:
+    //   LEAK_RATE_MB  每个 tick 泄漏多少 MB(默认 6MB)
+    //   TICK_MS       tick 间隔毫秒(默认 700ms)
+    // ============================================================================
+    import http from "node:http";
+
+    const LEAK_RATE_MB = Number(process.env.LEAK_RATE_MB ?? 6);
+    const TICK_MS = Number(process.env.TICK_MS ?? 700);
+    const PORT = Number(process.env.PORT ?? 8080);
+
+    const leakBuffer = [];
+    const startedAt = Date.now();
+
+    function writeLog(level, message, extra) {
+      const line = JSON.stringify(Object.assign({
+        "@timestamp": new Date().toISOString(),
+        service: "order-api",
+        level: level,
+        message: message,
+        pid: process.pid,
+        uptime_ms: Date.now() - startedAt,
+      }, extra || {}));
+      process.stdout.write(line + "\n");
+    }
+
+    writeLog("INFO", "order-api started", { leak_rate_mb: LEAK_RATE_MB });
+
+    const server = http.createServer((_req, res) => {
+      const mem = process.memoryUsage();
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ status: "ok", rss_mb: Math.round(mem.rss / 1024 / 1024) }));
+    });
+    server.listen(PORT);
+
+    let tickCount = 0;
+    setInterval(() => {
+      tickCount += 1;
+      leakBuffer.push(Buffer.alloc(LEAK_RATE_MB * 1024 * 1024, 1));
+
+      const mem = process.memoryUsage();
+      const rssMb = Math.round(mem.rss / 1024 / 1024);
+
+      if (tickCount % 3 === 0) {
+        writeLog("INFO", "handled request batch", {
+          rss_mb: rssMb,
+          requests_processed: tickCount * 17,
+          p99_latency_ms: 40 + Math.round(rssMb / 2),
+        });
+      }
+
+      if (rssMb > 140) {
+        writeLog("WARN", "memory usage approaching limit", {
+          rss_mb: rssMb, gc_pressure: "high",
+        });
+      }
+    }, TICK_MS);
+
+    process.on("SIGTERM", () => {
+      writeLog("INFO", "received SIGTERM, graceful shutdown", {});
+      process.exit(0);
+    });

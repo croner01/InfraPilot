@@ -6,22 +6,30 @@ import { Router } from "express";
 import { Client } from "ssh2";
 import {
   deleteLogSystem,
+  deleteDatabaseSystem,
+  deleteMetricSystem,
+  getDatabaseSystems,
   getHostRegistry,
   getLogSystems,
   getLlmProviders,
   getMcpConfig,
+  getMetricSystems,
+  setDatabaseSystems,
   setDefaultLlmProvider,
   setHosts,
   setLogSystems,
   setMcpConfig,
+  setMetricSystems,
+  upsertDatabaseSystem,
   upsertLogSystem,
   upsertLlmProvider,
+  upsertMetricSystem,
   deleteLlmProvider,
   generateMcpJwtSecret,
   getMemoryConfig,
   setMemoryConfig,
 } from "../config/store.js";
-import type { HostEntry, LogBackend, LlmProvider, MemoryConfig } from "../config/types.js";
+import type { DatabaseBackend, HostEntry, LogBackend, LlmProvider, MemoryConfig, PrometheusBackend } from "../config/types.js";
 import { findHost, getPrivateKeyContent, resolveAuthSecret } from "../gateway/sshHosts.js";
 import { reloadShipTargets, getShipStatus } from "../skills/elk/logShipper.js";
 
@@ -123,6 +131,100 @@ async function testLogSystem(system: LogBackend): Promise<boolean> {
   }
   throw new Error(`unsupported log system type: ${(system as any).type}`);
 }
+
+// -------------------- Metric Systems (Prometheus) --------------------
+
+configRouter.get("/metric-systems", (_req, res) => {
+  res.json({ systems: getMetricSystems() });
+});
+
+configRouter.post("/metric-systems", (req, res) => {
+  const system = req.body as PrometheusBackend;
+  if (!system?.id || !system?.name || !system?.url) {
+    res.status(400).json({ error: "id, name and url are required" });
+    return;
+  }
+  upsertMetricSystem({ ...system, type: "prometheus" });
+  res.json({ ok: true, systems: getMetricSystems() });
+});
+
+configRouter.delete("/metric-systems/:id", (req, res) => {
+  deleteMetricSystem(req.params.id);
+  res.json({ ok: true, systems: getMetricSystems() });
+});
+
+configRouter.post("/metric-systems/:id/test", async (req, res) => {
+  const system = getMetricSystems().find((s) => s.id === req.params.id);
+  if (!system) {
+    res.status(404).json({ error: "metric system not found" });
+    return;
+  }
+  try {
+    const { promHealthCheck } = await import("../skills/prometheus/client.js");
+    const info = await promHealthCheck(system);
+    res.json({ ok: true, reachable: true, version: info.version ?? "unknown" });
+  } catch (err: any) {
+    res.json({ ok: true, reachable: false, error: err?.message ?? String(err) });
+  }
+});
+
+// -------------------- Database Systems --------------------
+
+configRouter.get("/database-systems", (_req, res) => {
+  res.json({ systems: getDatabaseSystems() });
+});
+
+configRouter.post("/database-systems", (req, res) => {
+  const system = req.body as DatabaseBackend;
+  if (!system?.id || !system?.name || !system?.dialect || !system?.host) {
+    res.status(400).json({ error: "id, name, dialect and host are required" });
+    return;
+  }
+  upsertDatabaseSystem({ ...system, type: "database" });
+  res.json({ ok: true, systems: getDatabaseSystems() });
+});
+
+configRouter.delete("/database-systems/:id", (req, res) => {
+  deleteDatabaseSystem(req.params.id);
+  res.json({ ok: true, systems: getDatabaseSystems() });
+});
+
+configRouter.post("/database-systems/:id/test", async (req, res) => {
+  const system = getDatabaseSystems().find((s) => s.id === req.params.id);
+  if (!system) {
+    res.status(404).json({ error: "database system not found" });
+    return;
+  }
+  try {
+    if (system.dialect === "sqlite") {
+      const fs = await import("node:fs");
+      const reachable = fs.existsSync(system.host);
+      res.json({ ok: true, reachable, error: reachable ? undefined : `文件不存在: ${system.host}` });
+      return;
+    }
+    const net = await import("node:net");
+    const port = system.port ?? (system.dialect === "mysql" ? 3306 : 5432);
+    const reachable = await new Promise<boolean>((resolve) => {
+      const socket = net.createConnection({ host: system.host, port });
+      const timer = setTimeout(() => {
+        socket.destroy();
+        resolve(false);
+      }, 5000);
+      socket.on("connect", () => {
+        clearTimeout(timer);
+        socket.destroy();
+        resolve(true);
+      });
+      socket.on("error", () => {
+        clearTimeout(timer);
+        resolve(false);
+      });
+    });
+    res.json({ ok: true, reachable, error: reachable ? undefined : `无法连接 ${system.host}:${port}` });
+  } catch (err: any) {
+    res.json({ ok: true, reachable: false, error: err?.message ?? String(err) });
+  }
+});
 
 // -------------------- 远程主机配置 --------------------
 

@@ -4,7 +4,8 @@
 
 ## 1. 环境要求
 
-- Node.js 22（仅本地开发需要）
+- Python 3.11+（后端，`py-server/`）
+- Node.js 22（前端 `web/`；以及仍保留的 Node 后端 `server/`）
 - k3s / Kubernetes 1.28+
 - DeepSeek/Groq API Key（`GSK_API_KEY`）
 - （可选）OpenSearch / Elasticsearch（用于 ELK Skill）
@@ -37,7 +38,13 @@
 ## 3. 本地开发部署
 
 ```bash
-# 1. 后端
+# 1. 后端（Python / FastAPI，推荐）
+cd py-server
+pip3 install -r requirements.txt
+export GSK_API_KEY="your-key"
+python3 -m infrapilot      # http://localhost:8787
+
+# 1'. 后端（Node 版，迁移期可并存；同端口二者择一）
 cd server
 npm install
 export GSK_API_KEY="your-key"
@@ -48,6 +55,9 @@ cd web
 npm install
 npm run dev          # http://localhost:5173
 ```
+
+> py-server 默认数据目录为 `py-server/data`（`INFRAPILOT_DATA_DIR` 可覆盖），与 Node 版
+> `server/data` 相互隔离；技能包默认复用 `server/skills`。
 
 前端 dev server 已配置代理，所有 `/api` 与 `/ws` 请求会转发到 `http://localhost:8787`。
 
@@ -120,18 +130,24 @@ Agent/前端调用方式不变，只需在参数中指定 `host`：
 
 ## 5. 容器镜像构建
 
-### 5.1 后端镜像
+镜像统一推送到本机私有 registry（`localhost:5000`，k3s 与 registry 同机可直连）。
+如需改名/换仓库，同步修改 `server/k8s-manifests/infrapilot-server/deployment.yaml`
+与 `web/k8s-manifests/deployment.yaml` 中的 `image` 字段。
+
+### 5.1 后端镜像（Python / FastAPI）
 
 ```bash
-cd server
-docker build -t infrapilot-server:latest .
+# 构建上下文是仓库根目录：需要同时打包 py-server/ 与 server/skills/
+docker build -f py-server/Dockerfile -t localhost:5000/infrapilot/server:latest .
+docker push localhost:5000/infrapilot/server:latest
 ```
 
 ### 5.2 前端镜像
 
 ```bash
 cd web
-docker build -t infrapilot-web:latest .
+docker build -t localhost:5000/infrapilot/web:latest .
+docker push localhost:5000/infrapilot/web:latest
 ```
 
 ### 5.3 linux-mcp-server 镜像
@@ -143,15 +159,22 @@ docker build -f Dockerfile.mcp -t infrapilot/linux-mcp-server:latest .
 
 ### 5.4 加载镜像到 k3s 节点
 
-如果 k3s 使用 containerd，执行：
+**方式一（推荐）**：推送到 `localhost:5000` registry，Deployment 用
+`imagePullPolicy: Always` 自动拉取，无需在节点上导入。
 
 ```bash
-docker save infrapilot-server:latest | k3s ctr images import -
-docker save infrapilot-web:latest | k3s ctr images import -
+# 见 5.1 / 5.2：docker build → docker push localhost:5000/infrapilot/{server,web}:latest
+```
+
+**方式二（无 registry / 多节点）**：用与 Deployment 一致的 tag 直接导入 containerd：
+
+```bash
+docker save localhost:5000/infrapilot/server:latest | k3s ctr images import -
+docker save localhost:5000/infrapilot/web:latest | k3s ctr images import -
 docker save infrapilot/linux-mcp-server:latest | k3s ctr images import -
 ```
 
-如果是多节点集群，请推送到私有镜像仓库并修改镜像名。
+> 多节点集群请推送到各节点可达的私有仓库，并同步修改 Deployment 的 `image` 字段。
 
 ## 6. Kubernetes 部署
 
@@ -278,10 +301,12 @@ SSH 主机注册表可通过 `SSH_HOSTS` 环境变量或 `SSH_HOSTS_CONFIG` 配�
 升级服务端：
 
 ```bash
-cd server
-docker build -t infrapilot-server:latest .
-docker save infrapilot-server:latest | k3s ctr images import -
+# 1) 重新构建并推送 Python 后端镜像
+docker build -f py-server/Dockerfile -t localhost:5000/infrapilot/server:latest .
+docker push localhost:5000/infrapilot/server:latest
+# 2) 触发滚动重启（imagePullPolicy=Always 会拉取新镜像）
 kubectl rollout restart deployment/infrapilot-server -n infrapilot
+kubectl rollout status deployment/infrapilot-server -n infrapilot
 ```
 
 回滚：

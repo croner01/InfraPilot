@@ -5,6 +5,8 @@ metadata:
   namespace: infrapilot
   labels:
     app.kubernetes.io/name: infrapilot-web
+    app.kubernetes.io/part-of: infrapilot
+    app.kubernetes.io/component: frontend
 spec:
   replicas: 1
   selector:
@@ -14,11 +16,13 @@ spec:
     metadata:
       labels:
         app.kubernetes.io/name: infrapilot-web
+        app.kubernetes.io/part-of: infrapilot
     spec:
       containers:
         - name: web
-          image: infrapilot-web:latest
-          imagePullPolicy: IfNotPresent
+          # 前端静态站点镜像（Nginx，反代 /api 与 /ws 到 infrapilot-server:8787）
+          image: localhost:5000/infrapilot/web:v3.0.13
+          imagePullPolicy: Always
           ports:
             - name: http
               containerPort: 80
@@ -27,5 +31,17 @@ spec:
               memory: "64Mi"
               cpu: "100m"
             limits:
-              memory: "128Mi"
-              cpu: "200m"
+              memory: "192Mi"
+              cpu: "300m"
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 10
+            periodSeconds: 20

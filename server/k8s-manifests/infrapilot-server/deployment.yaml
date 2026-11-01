@@ -5,8 +5,13 @@ metadata:
   namespace: infrapilot
   labels:
     app.kubernetes.io/name: infrapilot-server
+    app.kubernetes.io/part-of: infrapilot
+    app.kubernetes.io/component: backend
 spec:
+  # SQLite 单写模型 + 进程内调度器：必须单副本，多副本会重复触发定时任务/写冲突
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app.kubernetes.io/name: infrapilot-server
@@ -14,12 +19,14 @@ spec:
     metadata:
       labels:
         app.kubernetes.io/name: infrapilot-server
+        app.kubernetes.io/part-of: infrapilot
     spec:
       serviceAccountName: infrapilot-server
       containers:
         - name: server
-          image: infrapilot-server:latest
-          imagePullPolicy: IfNotPresent
+          # Python(FastAPI) 后端镜像；构建方式见 py-server/Dockerfile 与 docs/deployment.md
+          image: localhost:5000/infrapilot/server:latest
+          imagePullPolicy: Always
           ports:
             - name: http
               containerPort: 8787
@@ -37,28 +44,42 @@ spec:
                 secretKeyRef:
                   name: infrapilot-server-secret
                   key: MCP_JWT_SECRET
-            # 可选：注入 SSH 主机注册表
+            # 可选：注入 SSH 主机注册表（JSON）
             # - name: SSH_HOSTS
             #   valueFrom:
             #     secretKeyRef:
             #       name: infrapilot-server-secret
             #       key: SSH_HOSTS
+          volumeMounts:
+            - name: data
+              mountPath: /app/data
           resources:
+            # Python 运行时 + 内置调度器 / 子 Agent / 沙箱，内存比 Node 版略高
             requests:
-              memory: "256Mi"
+              memory: "512Mi"
               cpu: "250m"
             limits:
-              memory: "512Mi"
+              memory: "1Gi"
               cpu: "1000m"
           livenessProbe:
             httpGet:
               path: /health
               port: 8787
-            initialDelaySeconds: 10
+            initialDelaySeconds: 15
             periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 4
           readinessProbe:
             httpGet:
               path: /health
               port: 8787
-            initialDelaySeconds: 3
+            initialDelaySeconds: 5
             periodSeconds: 5
+            timeoutSeconds: 3
+      volumes:
+        - name: data
+          # 单节点 k3s：hostPath 持久化 SQLite / runtime-config / 会话产物。
+          # 多节点集群请替换为 PVC（accessMode: ReadWriteOnce）。
+          hostPath:
+            path: /var/lib/infrapilot/data
+            type: DirectoryOrCreate

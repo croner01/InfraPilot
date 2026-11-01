@@ -1,0 +1,99 @@
+/* 会话清单列（对齐原型 .session-col：导航之外独立一列，可整列折叠） */
+.ui-session-col {
+  width: 262px;
+  flex: 0 0 262px;
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  transition: width 0.18s ease, flex-basis 0.18s ease, border-color 0.18s;
+}
+
+/* 收起后的常驻把手（与会话顶栏 ☰ 互为补充，避免收起后无入口） */
+.ui-session-col__handle {
+  position: fixed;
+  top: 50%;
+  left: 232px;
+  transform: translateY(-50%);
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 5px;
+  border: 1px solid var(--border);
+  border-left: none;
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  background: var(--panel);
+  color: var(--text-2);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  cursor: pointer;
+  box-shadow: 2px 0 10px rgba(15, 23, 42, 0.08);
+}
+
+.ui-session-col__handle:hover {
+  color: var(--text);
+  background: var(--bg);
+}
+
+.ui-session-col__handle-text {
+  writing-mode: vertical-rl;
+  letter-spacing: 2px;
+}
+
+.ui-session-col__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 15px 14px 11px;
+  border-bottom: 1px solid var(--border);
+  min-width: 262px;
+}
+
+.ui-session-col__title {
+  flex: 1;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.ui-session-col__new,
+.ui-session-col__collapse {
+  height: 26px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: var(--panel);
+  color: var(--text-2);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  cursor: pointer;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ui-session-col__new {
+  width: 26px;
+}
+
+.ui-session-col__collapse {
+  padding: 0 8px;
+  border-color: transparent;
+  color: var(--text-3);
+  font-size: 12.5px;
+}
+
+.ui-session-col__new:hover,
+.ui-session-col__collapse:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* 列内列表本身不再需要独立表头 */
+.ui-session-col .ui-session-list {
+  min-width: 262px;
+}

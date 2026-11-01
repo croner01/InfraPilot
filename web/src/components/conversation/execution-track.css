@@ -1,0 +1,446 @@
+.ui-track {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+}
+
+@keyframes ui-track-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.4);
+  }
+  50% {
+    opacity: 0.55;
+    box-shadow: 0 0 0 4px rgba(37, 99, 235, 0);
+  }
+}
+
+.ui-track__body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-right: 2px;
+}
+.ui-track__section-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  letter-spacing: 0.4px;
+  color: var(--text-3);
+  margin-top: 2px;
+}
+
+/* ---- 顶部固定区：只钉一行执行进展，高度约 20px，不遮挡正文 ---- */
+.ui-track__sticky {
+  position: sticky;
+  top: -1px;
+  z-index: 3;
+  background: var(--panel);
+  padding: 2px 0 6px;
+}
+
+/* 执行进展（第 N/M 步 + 进度条） */
+.ui-track__progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ui-track__progress-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--accent);
+  white-space: nowrap;
+}
+.ui-track__progress-track {
+  flex: 1;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--border);
+  overflow: hidden;
+}
+.ui-track__progress-fill {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--accent), var(--purple));
+  transition: width 0.4s ease;
+}
+
+/* ---- 思考记录：每次思考的详情 ---- */
+.ui-thinklog {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.ui-thinklog__item {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  overflow: hidden;
+}
+.ui-thinklog__item--open {
+  background: var(--panel);
+  border-left: 2px solid var(--purple);
+}
+.ui-thinklog__head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  padding: 6px 9px;
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  font-size: 11.5px;
+  color: var(--text-2);
+  cursor: pointer;
+  text-align: left;
+}
+.ui-thinklog__head:hover {
+  background: var(--hover-bg);
+}
+.ui-thinklog__idx {
+  flex: 0 0 15px;
+  height: 15px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--purple-soft);
+  color: var(--purple);
+  font-size: 10px;
+  font-weight: 700;
+}
+.ui-thinklog__time {
+  flex: 0 0 auto;
+  font-size: 10.5px;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+.ui-thinklog__summary {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-3);
+}
+.ui-thinklog__badge {
+  flex: 0 0 auto;
+  font-size: 10px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--purple-soft);
+  color: var(--purple);
+  font-weight: 600;
+}
+.ui-thinklog__caret {
+  flex: 0 0 auto;
+  font-size: 10px;
+  color: var(--text-3);
+}
+.ui-thinklog__body {
+  padding: 0 10px 10px 31px;
+  font-size: 12px;
+  line-height: 1.75;
+  color: var(--text-2);
+  border-top: 1px dashed var(--border);
+  padding-top: 8px;
+}
+.ui-thinklog__body .markdown-body {
+  font-size: 12px;
+}
+/* 流式条目：默认展开，正文内跟到最后一行，避免顶栏再开一个悬浮副本 */
+.ui-thinklog__item--live {
+  border-color: var(--accent);
+  background: var(--panel);
+}
+.ui-thinklog__item--live .ui-thinklog__head {
+  color: var(--text-1);
+}
+.ui-thinklog__item--live .ui-thinklog__time {
+  color: var(--accent);
+}
+.ui-thinklog__item--live .ui-thinklog__body {
+  max-height: 240px;
+  overflow-y: auto;
+}
+.ui-track__cursor {
+  display: inline-block;
+  width: 7px;
+  height: 13px;
+  background: var(--accent);
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  animation: ui-track-blink 0.9s steps(1) infinite;
+}
+@keyframes ui-track-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+/* ---- 里程碑时间线 ---- */
+.ui-track__steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.ui-track__step {
+  position: relative;
+  display: flex;
+  gap: 10px;
+  padding: 2px 0 14px 0;
+}
+.ui-track__step::before {
+  content: '';
+  position: absolute;
+  left: 10px;
+  top: 24px;
+  bottom: 0;
+  width: 2px;
+  background: var(--border);
+}
+.ui-track__step:last-child::before {
+  display: none;
+}
+.ui-track__step-dot {
+  width: 21px;
+  height: 21px;
+  flex: 0 0 21px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  font-size: 11px;
+  font-weight: 700;
+  background: var(--bg);
+  color: var(--text-3);
+  border: 2px solid var(--border);
+  box-sizing: border-box;
+  z-index: 1;
+}
+.ui-track__step--done .ui-track__step-dot {
+  background: var(--success-soft);
+  border-color: var(--success);
+  color: var(--success);
+}
+.ui-track__step--active .ui-track__step-dot {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+  animation: ui-track-pulse 1.4s ease-in-out infinite;
+}
+.ui-track__step--done .ui-track__step-label {
+  color: var(--text-2);
+}
+.ui-track__step--active .ui-track__step-label {
+  color: var(--accent);
+  font-weight: 700;
+}
+.ui-track__step-body {
+  flex: 1;
+  min-width: 0;
+  padding-top: 1px;
+}
+.ui-track__step-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.ui-track__step-label {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-3);
+}
+.ui-track__step-time {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+.ui-track__step-note {
+  font-size: 11px;
+  color: var(--text-3);
+  opacity: 0.8;
+  margin-top: 3px;
+  line-height: 1.6;
+}
+
+/* ---- 步骤内嵌的技能调用 ---- */
+.ui-track__step-tools {
+  list-style: none;
+  margin: 7px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.ui-track__tool {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--text-2);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 4px 9px;
+  min-width: 0;
+}
+.ui-track__tool-status {
+  flex: 0 0 12px;
+  text-align: center;
+  font-size: 11px;
+}
+.ui-track__tool--ok .ui-track__tool-status {
+  color: var(--success);
+}
+.ui-track__tool--fail .ui-track__tool-status {
+  color: var(--danger);
+}
+.ui-track__tool--fail .ui-track__tool-name {
+  color: var(--danger);
+}
+.ui-track__tool--running .ui-track__tool-status {
+  color: var(--accent);
+  animation: ui-track-pulse 1.4s infinite;
+}
+.ui-track__tool-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ui-track__tool-meta {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-shrink: 0;
+  font-size: 10.5px;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+.ui-track__call-risk {
+  color: var(--warn);
+  background: var(--warn-soft);
+  border-radius: 999px;
+  padding: 0 7px;
+  font-size: 10px;
+}
+
+/* ---- 会话信息汇总 ---- */
+.ui-track__info {
+  border-top: 1px solid var(--border);
+  margin-top: 4px;
+  padding-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.ui-track__info-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-size: 11.5px;
+  color: var(--text-3);
+}
+.ui-track__info-row b {
+  margin-left: auto;
+  font-weight: 500;
+  color: var(--text-2);
+  text-align: right;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+}
+.ui-track__info-risk {
+  color: var(--warn) !important;
+}
+
+/* ---- 审计 Tab ---- */
+.ui-track__calls {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.ui-track__call {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+}
+.ui-track__call:hover {
+  background: var(--bg);
+}
+.ui-track__call-status {
+  flex: 0 0 14px;
+  text-align: center;
+  font-size: 11px;
+}
+.ui-track__call--ok .ui-track__call-status {
+  color: var(--success);
+}
+.ui-track__call--fail .ui-track__call-status {
+  color: var(--danger);
+}
+.ui-track__call--running .ui-track__call-status {
+  color: var(--accent);
+  animation: ui-track-pulse 1.4s infinite;
+}
+.ui-track__call--fail .ui-track__call-name {
+  color: var(--danger);
+}
+.ui-track__call-name {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ui-track__audit-body {
+  flex: 1;
+  min-width: 0;
+}
+.ui-track__audit-meta {
+  display: flex;
+  gap: 10px;
+  font-size: 11px;
+  color: var(--text-3);
+  margin-top: 2px;
+}
+.ui-track__summary {
+  display: flex;
+  gap: 14px;
+  font-size: 11.5px;
+  color: var(--text-3);
+  padding: 8px 0 2px;
+  border-top: 1px dashed var(--border);
+  margin-top: 4px;
+}
+.ui-track__empty {
+  font-size: 12px;
+  color: var(--text-3);
+  padding: 4px 2px;
+}
+.ui-track__hint {
+  font-size: 11px;
+  color: var(--text-3);
+  line-height: 1.6;
+  padding-top: 6px;
+}

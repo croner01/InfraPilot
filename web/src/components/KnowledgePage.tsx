@@ -1,5 +1,11 @@
 import { useEffect, useState } from "react";
-import { addKnowledgeCase, listKnowledgeCases, searchKnowledgeCases } from "../lib/api.js";
+import {
+  addKnowledgeCase,
+  deleteKnowledgeCase,
+  fetchKnowledgeCase,
+  listKnowledgeCases,
+  searchKnowledgeCases,
+} from "../lib/api.js";
 import type { KnowledgeCase } from "../lib/api.js";
 
 export function KnowledgePage({ notify }: { notify: (msg: string, type?: "error" | "success") => void }) {
@@ -8,6 +14,7 @@ export function KnowledgePage({ notify }: { notify: (msg: string, type?: "error"
   const [loading, setLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [selected, setSelected] = useState<KnowledgeCase | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
   const [form, setForm] = useState<Partial<KnowledgeCase>>({
     severity: "p2",
     problemType: "",
@@ -37,6 +44,14 @@ export function KnowledgePage({ notify }: { notify: (msg: string, type?: "error"
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
+
+  const openDetail = async (c: KnowledgeCase) => {
+    setSelected(c);
+    setDetailLoading(true);
+    const full = await fetchKnowledgeCase(c.id, (err) => notify(err.message));
+    if (full) setSelected(full);
+    setDetailLoading(false);
+  };
 
   const handleSearch = async () => {
     if (!query.trim()) {
@@ -71,6 +86,15 @@ export function KnowledgePage({ notify }: { notify: (msg: string, type?: "error"
       setForm({ severity: "p2", problemType: "", title: "", summary: "", rootCauses: [], solutions: [], serviceName: "", tags: [] });
       await load();
     }
+  };
+
+  const handleDelete = async (c: KnowledgeCase) => {
+    if (!confirm(`确定删除案例「${c.title}」吗？删除后该案例会同时从知识库检索结果中移除，不可恢复。`)) return;
+    const res = await deleteKnowledgeCase(c.id, (err) => notify(err.message));
+    if (!res) return;
+    setCases((prev) => prev.filter((item) => item.id !== c.id));
+    setSelected((prev) => (prev?.id === c.id ? null : prev));
+    notify("案例已删除", "success");
   };
 
   const autoCount = cases.filter((c) => c.tags?.includes("auto_persisted")).length;
@@ -172,13 +196,13 @@ export function KnowledgePage({ notify }: { notify: (msg: string, type?: "error"
             <div
               key={c.id}
               className="knowledge-card card"
-              onClick={() => setSelected(c)}
+              onClick={() => openDetail(c)}
               role="button"
               tabIndex={0}
               onKeyDown={(e) => {
                 if (e.key === "Enter" || e.key === " ") {
                   e.preventDefault();
-                  setSelected(c);
+                  openDetail(c);
                 }
               }}
             >
@@ -212,10 +236,19 @@ export function KnowledgePage({ notify }: { notify: (msg: string, type?: "error"
                   className="btn btn--sm btn--secondary"
                   onClick={(e) => {
                     e.stopPropagation();
-                    setSelected(c);
+                    openDetail(c);
                   }}
                 >
                   查看详情
+                </button>
+                <button
+                  className="btn btn--sm btn--danger-ghost"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    void handleDelete(c);
+                  }}
+                >
+                  删除
                 </button>
               </div>
             </div>
@@ -229,7 +262,13 @@ export function KnowledgePage({ notify }: { notify: (msg: string, type?: "error"
           <div className="knowledge-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
             <div className="knowledge-modal__header">
               <h3>{selected.title}</h3>
-              <button className="btn btn--sm btn--ghost" onClick={() => setSelected(null)}>✕</button>
+              {detailLoading && <span className="knowledge-modal__loading">加载中…</span>}
+              <div className="knowledge-modal__actions">
+                <button className="btn btn--sm btn--danger-ghost" onClick={() => void handleDelete(selected)}>
+                  删除
+                </button>
+                <button className="btn btn--sm btn--ghost" onClick={() => setSelected(null)}>✕</button>
+              </div>
             </div>
             <div className="knowledge-modal__meta">
               <span className={`risk-badge risk-badge--${selected.severity}`}>{selected.severity}</span>

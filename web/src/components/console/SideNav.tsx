@@ -1,7 +1,5 @@
 import type { ReactNode } from 'react'
 import type { ViewKey } from '../../lib/view.js'
-import type { AgentSession } from '../../lib/types.js'
-import { SessionList } from './SessionList.js'
 import './sidenav.css'
 
 interface NavItem {
@@ -24,49 +22,36 @@ const workspaceNav: NavItem[] = [
   },
   {
     key: 'sessions',
-    label: '会话中心',
+    label: '诊断会话',
     icon: (
       <svg className="ui-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
         <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
       </svg>
     ),
   },
+  {
+    key: 'datasources',
+    label: '数据源',
+    icon: <DatabaseIcon />,
+  },
 ]
 
 const resourceNav: NavItem[] = [
   { key: 'knowledge', label: '知识库', icon: <BookIcon /> },
-  { key: 'topology', label: '拓扑', icon: <TopologyIcon /> },
-  { key: 'skills', label: '技能', icon: <SkillsIcon /> },
-  { key: 'settings', label: '设置', icon: <SettingsIcon /> },
+  { key: 'topology', label: '服务拓扑', icon: <TopologyIcon /> },
+  { key: 'skills', label: '技能管理', icon: <SkillsIcon /> },
+  { key: 'usage', label: '用量统计', icon: <UsageIcon /> },
+  { key: 'settings', label: '系统设置', icon: <SettingsIcon /> },
 ]
 
 interface SideNavProps {
   activeView: ViewKey
   alertCount: number
   onNavigate: (view: ViewKey) => void
-  activeSessions: AgentSession[]
-  closedSessions: AgentSession[]
-  currentId: string | null
-  search: string
-  onSearch: (value: string) => void
-  onSelect: (id: string) => void
-  onDelete: (id: string) => void
-  onTitleSave: (id: string, title: string) => void
 }
 
-export function SideNav({
-  activeView,
-  alertCount,
-  onNavigate,
-  activeSessions,
-  closedSessions,
-  currentId,
-  search,
-  onSearch,
-  onSelect,
-  onDelete,
-  onTitleSave,
-}: SideNavProps) {
+/** 左侧导航：只承载「工作台 / 资源」入口；会话清单由 SessionColumn 独立成列。 */
+export function SideNav({ activeView, alertCount, onNavigate }: SideNavProps) {
   const items = workspaceNav.map((item) => ({
     ...item,
     badge: item.key === 'alerts' ? alertCount : undefined,
@@ -82,18 +67,6 @@ export function SideNav({
       {resourceNav.map((item) => (
         <NavButton key={item.key} item={item} active={activeView === item.key} onNavigate={onNavigate} />
       ))}
-      {activeView === 'sessions' && (
-        <SessionList
-          activeSessions={activeSessions}
-          closedSessions={closedSessions}
-          currentId={currentId}
-          search={search}
-          onSearch={onSearch}
-          onSelect={onSelect}
-          onDelete={onDelete}
-          onTitleSave={onTitleSave}
-        />
-      )}
     </aside>
   )
 }
@@ -131,6 +104,16 @@ function BookIcon() {
   )
 }
 
+function DatabaseIcon() {
+  return (
+    <svg className="ui-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <ellipse cx="12" cy="5" rx="9" ry="3" />
+      <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" />
+      <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
+    </svg>
+  )
+}
+
 function TopologyIcon() {
   return (
     <svg className="ui-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -147,6 +130,15 @@ function SkillsIcon() {
       <rect x="14" y="3" width="7" height="7" rx="1" />
       <rect x="3" y="14" width="7" height="7" rx="1" />
       <rect x="14" y="14" width="7" height="7" rx="1" />
+    </svg>
+  )
+}
+
+function UsageIcon() {
+  return (
+    <svg className="ui-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21.21 15.89A10 10 0 1 1 8 2.83" />
+      <path d="M22 12A10 10 0 0 0 12 2v10z" />
     </svg>
   )
 }

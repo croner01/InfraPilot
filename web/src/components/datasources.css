@@ -1,0 +1,456 @@
+/* ============================================================================
+   DataSources 工作台样式 — 指标 / 日志 / 数据库 / 知识库
+   复用 app.css 的设计 token（--panel/--border/--text 等），浅深主题自动适配
+   ============================================================================ */
+
+.ds-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  height: 100%;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.ds-layout {
+  display: grid;
+  grid-template-columns: 248px 1fr;
+  gap: 18px;
+  align-items: start;
+}
+
+/* 数据类别：本页的主导航，做成独立面板并承载后端信息与计数 */
+.ds-nav {
+  position: sticky;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 12px;
+  background: var(--panel, #fff);
+  border: 1px solid var(--border, #e4e7ec);
+  border-radius: var(--radius, 10px);
+}
+
+.ds-nav__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ds-nav__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 10px;
+  border: none;
+  border-radius: var(--radius-sm, 6px);
+  background: transparent;
+  color: var(--text-2, #4b5565);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.ds-nav__item:hover {
+  background: var(--hover-bg, #f2f4f7);
+  color: var(--text-1, #101828);
+}
+
+.ds-nav__item--active {
+  background: var(--accent-soft);
+  color: var(--accent);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.ds-nav__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.ds-nav__label {
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.ds-nav__meta {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ds-nav__item--active .ds-nav__meta {
+  color: var(--accent);
+  opacity: 0.75;
+}
+
+.ds-nav__count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 34px;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: 10px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+.ds-nav__hint {
+  font-size: 11.5px;
+  color: var(--text-3);
+  line-height: 1.6;
+  padding: 0 2px;
+  border-top: 1px solid var(--border, #e4e7ec);
+  padding-top: 10px;
+}
+
+.ds-content {
+  min-width: 0;
+}
+
+.ds-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ds-card {
+  padding: 14px 16px;
+}
+
+.ds-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.ds-grow {
+  flex: 1;
+  min-width: 160px;
+}
+
+/* PromQL / SQL 编辑区 */
+.ds-query-row {
+  display: flex;
+  gap: 12px;
+  margin-top: 10px;
+  align-items: stretch;
+}
+
+.ds-promql,
+.ds-sql {
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.ds-query-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.ds-query-hint {
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+.ds-preset-row {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.ds-quick-row {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.ds-quick-label {
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+.ds-chip {
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text-2);
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.ds-chip:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.ds-chip--active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.ds-chip--history {
+  font-family: var(--font-mono);
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ds-error {
+  padding: 10px 14px;
+  border-left: 3px solid var(--danger);
+  background: var(--danger-soft);
+  color: var(--danger);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+/* 图表容器 */
+.ds-chart {
+  width: 100%;
+  min-height: 120px;
+  margin-top: 8px;
+}
+
+.ds-chart .uplot {
+  font-size: 11px;
+}
+
+.ds-chart .uplot .legend {
+  font-size: 11px;
+}
+
+/* 序列列表 */
+.ds-series-list {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ds-series-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  font-size: 12px;
+  padding: 4px 8px;
+  background: var(--hover-bg);
+  border-radius: var(--radius-sm);
+}
+
+.ds-series-row code {
+  font-family: var(--font-mono);
+  color: var(--text-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ds-series-row span {
+  color: var(--text-3);
+  white-space: nowrap;
+}
+
+/* 结果表格 */
+.ds-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  margin-top: 10px;
+  max-height: 420px;
+  overflow-y: auto;
+}
+
+.ds-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+
+.ds-table th {
+  position: sticky;
+  top: 0;
+  background: var(--hover-bg);
+  color: var(--text-2);
+  text-align: left;
+  padding: 7px 10px;
+  font-weight: 600;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+  z-index: 1;
+}
+
+.ds-table td {
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  vertical-align: top;
+}
+
+.ds-table td code {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  word-break: break-all;
+}
+
+.ds-table--logs td.ds-msg {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: var(--text);
+}
+
+.ds-nowrap {
+  white-space: nowrap;
+}
+
+.ds-level {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.ds-level--error {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.ds-level--warn {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+
+.ds-level--info {
+  background: var(--info-soft);
+  color: var(--info);
+}
+
+/* 知识案例卡片 */
+.ds-case-card {
+  padding: 12px 16px;
+}
+
+.ds-case-card__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.ds-case-card__title {
+  font-size: 14px;
+}
+
+.ds-case-card__score {
+  font-size: 12px;
+  color: var(--text-3);
+  margin-left: auto;
+}
+
+.ds-case-card__summary {
+  margin: 8px 0;
+  font-size: 13px;
+  color: var(--text-2);
+  line-height: 1.65;
+}
+
+.ds-case-card__section {
+  margin-top: 6px;
+  font-size: 12.5px;
+}
+
+.ds-case-card__section ul {
+  margin: 4px 0 0 18px;
+  padding: 0;
+  color: var(--text-2);
+  line-height: 1.7;
+}
+
+.ds-case-card__label {
+  display: inline-block;
+  font-weight: 600;
+  color: var(--accent);
+  font-size: 12px;
+}
+
+/* 内联新增表单 */
+.ds-inline-form {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* 响应式：窄屏折叠左侧导航 */
+@media (max-width: 1100px) {
+  .ds-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .ds-nav {
+    position: static;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .ds-nav .settings-nav__title,
+  .ds-nav__hint {
+    display: none;
+  }
+
+  .ds-nav .settings-nav__list,
+  .ds-nav__list {
+    display: flex;
+    flex-direction: row;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .ds-nav__item--active {
+    box-shadow: none;
+  }
+
+  .ds-nav__meta {
+    display: none;
+  }
+}

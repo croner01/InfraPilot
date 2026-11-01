@@ -11,6 +11,7 @@
 
 import { ToolDef, ToolExecutionResult } from "../../types.js";
 import {
+  deletePod,
   execPodCommand,
   getDeployment,
   isAbnormalPod,
@@ -31,7 +32,7 @@ export const k8sTools: ToolDef[] = [
     skill: "k8s",
     risk: "readonly",
     description:
-      "列出 Pod 并返回汇总式结果: summary 计数在最前(total/running/abnormal + 按状态聚合 byReason, 可区分 Evicted/Error/OOMKilled/CrashLoopBackOff), running 显式列出健康副本, pods 为最多15条按时间倒序的异常样本。用于确认服务是否可用、定位异常目标。",
+      "列出 Pod 并返回汇总式结果: summary 计数在最前(total/running/abnormal + 按状态聚合 byReason, 可区分 Evicted/Error/OOMKilled/CrashLoopBackOff + byNode 按节点聚合 running/abnormal/restarts), running 显式列出健康副本, pods 为最多15条按时间倒序的异常样本。用于确认服务是否可用、定位异常目标; 判断异常是否集中在个别节点时优先看 summary.byNode。",
     parameters: {
       type: "object",
       properties: {
@@ -183,6 +184,22 @@ export const k8sTools: ToolDef[] = [
       additionalProperties: false,
     },
   },
+  {
+    name: "delete_pod",
+    skill: "k8s",
+    risk: "high",
+    description:
+      "删除指定 Pod(等价于 kubectl delete pod)。用于让卡死/长期 CrashLoopBackOff/不可调度的副本被控制器立即重建(Deployment/ReplicaSet/StatefulSet 管理的 Pod 会重建, 裸 Pod 删除后不会回来)。会短暂减少可用副本, 属变更操作需人工审批; 调用前必须先说明为什么重建能解决问题(例如副本被钉在某个异常节点/宿主环境), 而不是把重建当成试错手段。",
+    parameters: {
+      type: "object",
+      properties: {
+        namespace: { type: "string" },
+        pod_name: { type: "string" },
+      },
+      required: ["namespace", "pod_name"],
+      additionalProperties: false,
+    },
+  },
 ];
 
 export async function executeK8sTool(tool: string, args: Record<string, unknown>): Promise<ToolExecutionResult> {
@@ -213,6 +230,15 @@ export async function executeK8sTool(tool: string, args: Record<string, unknown>
           .map(decorate);
         const abnormal = pods.filter(isAbnormalPod);
         const byReason = countBy(abnormal.map((p) => p.status ?? p.reason ?? "Unknown"));
+        const byNode: Record<string, { total: number; running: number; abnormal: number; restarts: number }> = {};
+        for (const p of pods) {
+          const node = p.nodeName ?? "未调度";
+          const entry = (byNode[node] ??= { total: 0, running: 0, abnormal: 0, restarts: 0 });
+          entry.total += 1;
+          if (p.status === "Running" && p.ready) entry.running += 1;
+          if (isAbnormalPod(p)) entry.abnormal += 1;
+          entry.restarts += p.restartCount ?? 0;
+        }
         const capped = capSamples(
           [...abnormal]
           .sort((a, b) => {
@@ -231,6 +257,7 @@ export async function executeK8sTool(tool: string, args: Record<string, unknown>
               running: running.length,
               abnormal: abnormal.length,
               byReason,
+              byNode,
             },
             running,
             pods: capped.samples,
@@ -373,6 +400,19 @@ export async function executeK8sTool(tool: string, args: Record<string, unknown>
           data: {
             message: `已通过 K8s API 将 ${namespace}/${deployment_name} 的 memory limit 调整为 ${memory_limit_mi}Mi, 已触发滚动重启`,
             new_limit_mi: memory_limit_mi,
+          },
+          durationMs: Date.now() - start,
+        };
+      }
+
+      case "delete_pod": {
+        const { namespace, pod_name } = args as { namespace: string; pod_name: string };
+        await deletePod(namespace, pod_name);
+        return {
+          success: true,
+          data: {
+            deleted: `${namespace}/${pod_name}`,
+            note: "Pod 已删除; 若由 Deployment/ReplicaSet 管理, 控制器会立即重建(可能落在其它节点)。",
           },
           durationMs: Date.now() - start,
         };
